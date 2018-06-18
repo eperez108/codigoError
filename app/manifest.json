@@ -1,0 +1,45 @@
+{
+  "name": "__MSG_appName__",
+  "short_name": "__MSG_appShortName__",
+  "description": "__MSG_appDescription__",
+  "version": "0.0.0",
+  "manifest_version": 2,
+  "default_locale": "en",
+  "icons": {
+    "16": "images/icon-16.png",
+    "48": "images/icon-48.png",
+    "128": "images/icon-128.png"
+  },
+  "background": {
+    "scripts": [
+      "scripts/background.js"
+    ]
+  },
+  "options_page": "pages/options.html",
+  "options_ui": {
+    "page": "pages/options.html",
+    "chrome_style": true
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://hypothes.is/groups/*"],
+      "css": ["styles/estilo.css"],
+      "js": ["scripts/content.js","scripts/ScatterPlot.js","scripts/SankeyDiagram.js"]
+    },
+    {
+      "matches": ["https://drive.google.com/drive/*"],
+      "css": ["styles/estiloSpiderChart.css"],
+      "js": ["scripts/d3-radar.js","scripts/SpiderChart.js"]
+    },
+    {
+      "matches": ["https://hypothes.is/users/*"],
+      "css": ["styles/estilo.css"],
+      "js": ["scripts/ScatterPlot2.js"]
+    }
+  ],
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "<all_urls>"
+  ]
+}
