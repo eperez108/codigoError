@@ -19,20 +19,17 @@ class SankeyDiagram {
         this.notas4Examen = require('./Notas4Examen')
     }
 
-    init () {
-        let xhttp = new XMLHttpRequest();
-        xhttp.onreadystatechange = function() {
-            if (this.readyState === 4 && this.status === 200) {
-                let groups= JSON.parse(this.responseText);
-                this.gruposNombreID=_.map(groups,(grupo)=>({
-                    'id': grupo.id,
-                    'nombre': grupo.name
-                }));
+    init (callback) {
+        // Get list of groups
+        window.hypothesisClient.getListOfGroups({}, (err, listOfGroups) => {
+            this.gruposNombreID = _.map(listOfGroups,(group)=>({
+                'id': group.id,
+                'nombre': group.name
+            }));
+            if (_.isFunction(callback)) {
+                callback()
             }
-        };
-        xhttp.open("GET", "https://hypothes.is/api/groups?limit=200", true);
-        xhttp.setRequestHeader("Authorization", "Bearer 6879-Q--ve1yLCItODnHueg4py6UT-qqq93bk-xgvra0-BVA");
-        xhttp.send();
+        })
     }
 
     obtenerAnotacionesSankey(anotaciones) {
@@ -54,12 +51,13 @@ class SankeyDiagram {
         var links = this.obtenerLinks(this.preguntasExamen,anotFiltradas, anotaciones);
         //Creamos el grafo con los nodos y los enlaces (sin el resto de examenes)
         var graphSinRestoExamenes = {nodes:  nodes, links: links};
-        // Obtener el resto de enlaces para dibujar el nuevo diagrama
-        this.obtenerLinksRestoExamenes(graphSinRestoExamenes);
         //Se realizan copias para evitar cualquier problema
         var preguntasCopia= _.clone(this.preguntasExamen);
         var examenesCopia=  _.clone(this.restoExamenes);
         this.dibujarGraficoSankey(graphSinRestoExamenes,preguntasCopia,examenesCopia, anotaciones);
+
+        // Obtener el resto de enlaces para dibujar el nuevo diagrama
+        this.obtenerLinksRestoExamenes(graphSinRestoExamenes);
     }
 
     obtenerNodos(tags){
@@ -292,7 +290,7 @@ class SankeyDiagram {
                 .attr("id",function (d,i) { return "desplegable"+i;})
                 .style("width", function (d,i) { return (distancia<180)? ((distancia*0.7)+'px') : "180px"})
                 .style("margin-right", function (d,i) { return (distancia<180)? ((distancia*0.3)+'px') : (distancia-180)+'px'})
-                .on('change',function (d,i) { return intercambiar(preguntas[i]);})
+                .on('change',function (d,i) { return this.intercambiar(preguntas[i]);})
                 .selectAll("option")
                 .data(preguntas)
                 .enter()
@@ -320,7 +318,7 @@ class SankeyDiagram {
                 .attr("id",function (d,i) { return "desplegableExamen"+i;})
                 .style("width", function (d,i) { return (distancia<180)? ((distancia*0.7)+'px') : "180px"})
                 .style("margin-left", function (d,i) { if (distancia<180){ if(i==0) {return distancia*0.7+'px';} else {return ((distancia*0.3)+'px');}} else { if(i==0) {return (distancia*1.25-180)+'px';} else {return (distancia-180)+'px';}}})
-                .on('change',function (d,i) { return intercambiarExamen(examenes[i]);})
+                .on('change',function (d,i) { return this.intercambiarExamen(examenes[i]);})
                 .selectAll("option")
                 .data(gruposNombre)
                 .enter()
@@ -336,34 +334,6 @@ class SankeyDiagram {
                     .append("title")
                     .text(examenes[i]);
             }
-
-            //Intercambia la posicion de dos preguntas y actualiza el diagrama
-            function intercambiar(defecto) {
-                var pos1=preguntas.indexOf(defecto)
-                var selectValue =d3.select('#desplegable'+pos1).property('value');
-                var pos2=preguntas.indexOf(selectValue);
-                preguntas[pos1]=selectValue;
-                preguntas[pos2]=defecto;
-                var anotFiltradas = _.filter(anotaciones, (anotacion) => {Utils.esPreguntaNotaTags(anotacion.tags)});
-                var links=this.obtenerLinks(preguntas,anotFiltradas);
-                var grafoNuevo = {nodes: _.clone(graphCopy.nodes), links: _.concat(links,_.clone(this.linksRestoExamenes))};
-                this.dibujarGraficoSankey(grafoNuevo,preguntas,examenes, anotaciones);
-            };
-
-            //Intercambia la posicion de dos examenes y actualiza el diagrama
-            function intercambiarExamen(examen) {
-                var pos1=examenes.indexOf(examen);
-                var selectValue =d3.select('#desplegableExamen'+pos1).property('value');
-                var pos2=examenes.indexOf(selectValue);
-                examenes[pos1]=selectValue;
-                examenes[pos2]=examen;
-                var grupos=_.concat(_.clone(this.group),_.clone(_.clone(this.restoExamenes)));
-                var enlacesEjercicios= _.filter(graphCopy.links, (link) => (!_.includes(grupos,link.source.slice(0,8))));
-                var enlacesExamenes=this.actualizarLinksExamenes(examenes);
-                var grafoNuevo= {nodes: _.clone(graphCopy.nodes), links: _.concat(enlacesEjercicios,enlacesExamenes)};
-                this.linksRestoExamenes= _.clone(enlacesExamenes);
-                this.dibujarGraficoSankey(grafoNuevo,preguntas,examenes, anotaciones);
-            };
 
 
             //Añade un boton con la imagen previa para eliminar una columna de nodos
@@ -470,86 +440,113 @@ class SankeyDiagram {
         })(grafo);
     }
 
+    //Intercambia la posicion de dos preguntas y actualiza el diagrama
+    intercambiar (defecto) {
+        var pos1 = preguntas.indexOf(defecto)
+        var selectValue =d3.select('#desplegable'+pos1).property('value');
+        var pos2=preguntas.indexOf(selectValue);
+        preguntas[pos1]=selectValue;
+        preguntas[pos2]=defecto;
+        var anotFiltradas = _.filter(anotaciones, (anotacion) => {Utils.esPreguntaNotaTags(anotacion.tags)});
+        var links = this.obtenerLinks(preguntas,anotFiltradas);
+        var grafoNuevo = {nodes: _.clone(graphCopy.nodes), links: _.concat(links,_.clone(this.linksRestoExamenes))};
+        this.dibujarGraficoSankey(grafoNuevo,preguntas,examenes, anotaciones);
+    }
+
+    //Intercambia la posicion de dos examenes y actualiza el diagrama
+    intercambiarExamen(examen) {
+        var pos1=examenes.indexOf(examen);
+        var selectValue =d3.select('#desplegableExamen'+pos1).property('value');
+        var pos2=examenes.indexOf(selectValue);
+        examenes[pos1]=selectValue;
+        examenes[pos2]=examen;
+        var grupos=_.concat(_.clone(this.group),_.clone(_.clone(this.restoExamenes)));
+        var enlacesEjercicios= _.filter(graphCopy.links, (link) => (!_.includes(grupos,link.source.slice(0,8))));
+        var enlacesExamenes=this.actualizarLinksExamenes(examenes);
+        var grafoNuevo= {nodes: _.clone(graphCopy.nodes), links: _.concat(enlacesEjercicios,enlacesExamenes)};
+        this.linksRestoExamenes= _.clone(enlacesExamenes);
+        this.dibujarGraficoSankey(grafoNuevo,preguntas,examenes, anotaciones);
+    }
+
     obtenerLinksRestoExamenes (grafo){
-        let grupos;
-        var xhttp = new XMLHttpRequest();
         var enlaces=[];
         var nodos=[];
         var grupoActual=this.group;
         var graph=_.clone(grafo);
-        let me = this
-        xhttp.onreadystatechange = function() {
-            if (this.readyState === 4 && this.status === 200) {
-                grupos= JSON.parse(this.responseText);
-                var gruposId=_.map(grupos,'id');
-                _.pull(gruposId, grupoActual); //Elimina el grupo actual de la lista de grupos
-                var resultadosExamenOrigen=_.clone(me.resultadoFinalAlumnos);
-                me.resultadosAlumnos.push({examen:grupoActual,resultados:_.clone(this.resultadoFinalAlumnos)});
-                for (var i=0;i<gruposId.length;i++){
-                    var resultadosExamenDestino=me.resultados(gruposId[i]); //Obtiene los resultados de los alumnos de un examen
-                    if (resultadosExamenDestino.length>0){ //Si se ha devuelto una lista vacia se debe a que el grupo no era de un examen
-                        //Añade a cada alumno en la lista resultadosExamenOrigen el resultado del examen obtenidos en resultadosExamenDestino.
-                        //Para diferenciar el nombre de los atributos, al resultado del origen se le llama "resultadoFinal" y al de destino "resultado"
-                        var preguntasAlumnosConResultado = _.map(resultadosExamenOrigen, function (alumno) {
-                            return _.assign(alumno, _.find(resultadosExamenDestino, {
-                                uri: alumno.uri
-                            }));
-                        });
-                        //Obtiene los aprobados en el examen de origen y cuenta los distintos resultados en el examen de destino.
-                        //Puede ocurrir que en el de destino no se haya presentado un alumno y en ese caso en el countBy se genera un atributo undefined que hay que omitir.
-                        var linkAprobados = _(preguntasAlumnosConResultado).filter({'resultadoFinal': "Aprobado"}).countBy("resultado").omit('undefined')
-                            .map((count, mark) => ({
-                                'source': grupoActual.concat("Aprobado"),
-                                'target': gruposId[i].concat(mark),
-                                'value': count,
-                                'resultadoFinal': mark
-                            })).value();
+        window.hypothesisClient.getListOfGroups({}, (err, grupos) => {
+            var gruposId=_.map(grupos,'id');
+            _.pull(gruposId, grupoActual); //Elimina el grupo actual de la lista de grupos
+            var resultadosExamenOrigen=_.clone(this.resultadoFinalAlumnos);
+            this.resultadosAlumnos.push({examen:grupoActual,resultados:_.clone(this.resultadoFinalAlumnos)});
+            // Crear un promise por cada grupo, ya que las llamadas al servidor de hypothes.is siempre son asincronas
+            let promises = []
+            for (let i = 0; i < gruposId.length; i++) {
+                promises.push(new Promise((resolve, reject) => {
+                    this.resultados(gruposId[i], (resultadosExamenDestino) => {
+                        if (resultadosExamenDestino.length>0){ //Si se ha devuelto una lista vacia se debe a que el grupo no era de un examen
+                            //Añade a cada alumno en la lista resultadosExamenOrigen el resultado del examen obtenidos en resultadosExamenDestino.
+                            //Para diferenciar el nombre de los atributos, al resultado del origen se le llama "resultadoFinal" y al de destino "resultado"
+                            var preguntasAlumnosConResultado = _.map(resultadosExamenOrigen, function (alumno) {
+                                return _.assign(alumno, _.find(resultadosExamenDestino, {
+                                    uri: alumno.uri
+                                }));
+                            });
+                            //Obtiene los aprobados en el examen de origen y cuenta los distintos resultados en el examen de destino.
+                            //Puede ocurrir que en el de destino no se haya presentado un alumno y en ese caso en el countBy se genera un atributo undefined que hay que omitir.
+                            var linkAprobados = _(preguntasAlumnosConResultado).filter({'resultadoFinal': "Aprobado"}).countBy("resultado").omit('undefined')
+                                .map((count, mark) => ({
+                                    'source': grupoActual.concat("Aprobado"),
+                                    'target': gruposId[i].concat(mark),
+                                    'value': count,
+                                    'resultadoFinal': mark
+                                })).value();
 
 
-                        var linkSuspensos = _(preguntasAlumnosConResultado).filter({'resultadoFinal': "Suspenso"}).countBy("resultado")
-                            .omit('undefined').map((count, mark) => ({
-                                'source': grupoActual.concat("Suspenso"),
-                                'target': gruposId[i].concat(mark),
-                                'value': count,
-                                'resultadoFinal': mark
-                            })).value();
+                            var linkSuspensos = _(preguntasAlumnosConResultado).filter({'resultadoFinal': "Suspenso"}).countBy("resultado")
+                                .omit('undefined').map((count, mark) => ({
+                                    'source': grupoActual.concat("Suspenso"),
+                                    'target': gruposId[i].concat(mark),
+                                    'value': count,
+                                    'resultadoFinal': mark
+                                })).value();
 
-                        enlaces= _.concat(enlaces, linkAprobados);
-                        enlaces = _.concat(enlaces, linkSuspensos);
+                            enlaces= _.concat(enlaces, linkAprobados);
+                            enlaces = _.concat(enlaces, linkSuspensos);
 
-                        //El grupo de destino pasa a ser el grupo actual y los resultados del examen destino se convierten en origen
-                        //(se cambia el nombre del atributo 'resultado' a 'resultadoFinal').
-                        if(enlaces.length>0) {
-                            nodos = _.concat(nodos, [{
-                                'id': gruposId[i].concat("Aprobado"),
-                                'name': "Aprobado"
-                            }, {'id': gruposId[i].concat("Suspenso"), 'name': "Suspenso"}]);
+                            //El grupo de destino pasa a ser el grupo actual y los resultados del examen destino se convierten en origen
+                            //(se cambia el nombre del atributo 'resultado' a 'resultadoFinal').
+                            if(enlaces.length>0) {
+                                nodos = _.concat(nodos, [{
+                                    'id': gruposId[i].concat("Aprobado"),
+                                    'name': "Aprobado"
+                                }, {'id': gruposId[i].concat("Suspenso"), 'name': "Suspenso"}]);
 
-                            me.resultadosAlumnos.push({examen:gruposId[i],resultados:_.clone(resultadosExamenDestino)});
+                                this.resultadosAlumnos.push({examen:gruposId[i],resultados:_.clone(resultadosExamenDestino)});
 
-                            grupoActual = gruposId[i];
-                            resultadosExamenOrigen = _.map(resultadosExamenDestino, resultado => ({
-                                'uri': resultado.uri,
-                                'resultadoFinal': resultado.resultado
-                            }));
-                            restoExamenes.push(gruposId[i]);
+                                grupoActual = gruposId[i];
+                                resultadosExamenOrigen = _.map(resultadosExamenDestino, resultado => ({
+                                    'uri': resultado.uri,
+                                    'resultadoFinal': resultado.resultado
+                                }));
+                                this.restoExamenes.push(gruposId[i]);
+                            }
                         }
-                    }
-
-                }
+                        resolve()
+                    });
+                }))
+            }
+            // Ejecutamos los promises y refrescamos el gráfico
+            Promise.all(promises).then(() => {
                 graph.nodes = _.concat(graph.nodes,nodos);
                 graph.links = _.concat(graph.links,enlaces);
-                me.nodesRestoExamenes = nodos; // Se guardan los enalces del resto de examenes
-                me.linksRestoExamenes = enlaces; //Se guardan nos nodos del resto de examenes
-                me.graphOriginal = {nodes: graph.nodes, links: graph.links}; //Se guarda el grafo original
-                var preguntasCopia = _.clone(me.preguntasExamen);
-                me.dibujarGraficoSankey(graph,preguntasCopia,_.clone(me.restoExamenes), anotaciones);
-                d3.select("#dv").append("button").attr("id","refrescar").text("Refrescar").on("click", (d) => me.dibujarGraficoSankey(_.clone(me.graphOriginal),_.clone(me.preguntasExamen),examenes, anotaciones));
-            }
-        };
-        xhttp.open("GET", "https://hypothes.is/api/groups?");
-        xhttp.setRequestHeader("Authorization", "Bearer 6879-Q--ve1yLCItODnHueg4py6UT-qqq93bk-xgvra0-BVA");
-        xhttp.send();
+                this.nodesRestoExamenes = nodos; // Se guardan los enalces del resto de examenes
+                this.linksRestoExamenes = enlaces; //Se guardan nos nodos del resto de examenes
+                this.graphOriginal = {nodes: graph.nodes, links: graph.links}; //Se guarda el grafo original
+                var preguntasCopia = _.clone(this.preguntasExamen);
+                this.dibujarGraficoSankey(graph,preguntasCopia,_.clone(this.restoExamenes), anotaciones);
+                d3.select("#dv").append("button").attr("id","refrescar").text("Refrescar").on("click", (d) => this.dibujarGraficoSankey(_.clone(this.graphOriginal),_.clone(this.preguntasExamen),examenes, anotaciones));
+            })
+        })
     }
 
     actualizarLinksExamenes(examenes) {
@@ -600,66 +597,52 @@ class SankeyDiagram {
         return enlaces;
     }
 
-    resultados(grupo){
-        //Se obtiene la primera anotacion de cada grupo para comprobar si es de un examen o no
-        var primeraAnotacion;
-        var xhttp = new XMLHttpRequest();
-        xhttp.onreadystatechange = function() {
-            if (this.readyState == 4 && this.status == 200) {
-                primeraAnotacion= JSON.parse(this.responseText);
+    resultados (grupo, callback) {
+        // TODO Remove in production
+        // Grupos con examenes ficticios
+        if (grupo==="78AJ6wx7") {
+            if (_.isFunction(callback)) {
+                callback(this.notas3Examen)
             }
-        };
-        xhttp.open("GET", "https://hypothes.is/api/search?group="+grupo+"&limit=1&order=asc", false);
-        xhttp.setRequestHeader("Authorization", "Bearer 6879-Q--ve1yLCItODnHueg4py6UT-qqq93bk-xgvra0-BVA");
-        xhttp.send();
-        var listaParAlumnoResultado = [];
-        //Comprobamos si el tag de la primera anotacion tiene el prefijo exam
-        if (primeraAnotacion.total>0 && primeraAnotacion.rows[0].tags.length>0 && primeraAnotacion.rows[0].tags[0].substring(0, 4)=="exam"){
+        } else if (grupo==="YjymyPqK"){
+            if (_.isFunction(callback)) {
+                callback(this.notas4Examen)
+            }
+        } else { // Grupo real en hypothes.is con examen
+            window.hypothesisClient.searchAnnotations({
+                group: grupo,
+                limit: 1
+            }, (err, primeraAnotacion) => {
+                if (err) {
 
-            var xhttp = new XMLHttpRequest();
-            let me = this
-            xhttp.onreadystatechange = function() {
-                if (this.readyState == 4 && this.status == 200) {
-                    me.anotacionesGrupo= JSON.parse(this.responseText);
+                } else {
+                    if (primeraAnotacion.total>0 && primeraAnotacion.rows[0].tags.length>0 && primeraAnotacion.rows[0].tags[0].substring(0, 4)=="exam") {
+                        window.hypothesisClient.searchAnnotations({
+                            group: grupo
+                        }, (err, anotacionesGrupo) => {
+                            var anotFiltradas = _.filter(this.anotacionesGrupo, (anotacion) => (Utils.esPreguntaNotaTags(anotacion.tags)));
 
+                            var preguntasAlumnosRep = _.map(anotFiltradas, (anotacion) => ({
+                                'uri': anotacion.uri,
+                                'pregunta': anotacion.tags[0].slice(18),
+                                'nota': parseInt(anotacion.tags[1].slice(10))
+                            }))
+                            var preguntasAlumnos = _.uniqBy(preguntasAlumnosRep, (alumno) => (alumno.uri.concat(alumno.pregunta)));   //Se eliminan los repetidos
+
+                            //Se obtienen los resultados de cada alumno
+                            listaParAlumnoResultado = _(preguntasAlumnos).groupBy('uri')
+                                .map((preguntas, alumno) => ({
+                                    'uri': alumno,
+                                    'resultado': (Utils.normalizar(anotacionesGrupo, _.sumBy(preguntas, 'nota')) >= 5) ? "Aprobado" : "Suspenso"
+                                })).value();
+                            if (_.isFunction(callback)) {
+                                callback(listaParAlumnoResultado)
+                            }
+                        })
+                    }
                 }
-            };
-            xhttp.open("GET", "https://hypothes.is/api/search?group="+grupo+"&limit=200&order=asc", false);
-            xhttp.setRequestHeader("Authorization", "Bearer 6879-Q--ve1yLCItODnHueg4py6UT-qqq93bk-xgvra0-BVA");
-            xhttp.send();
-
-            var numAnotacionesTotal= this.anotacionesGrupo.total;
-            var numAnotacionesAcumuladas= this.anotacionesGrupo.rows.length;
-            anotacionesGrupo=anotacionesGrupo.rows;
-            debugger
-            while (numAnotacionesTotal!=numAnotacionesAcumuladas){
-                var offset=numAnotacionesAcumuladas;
-                me.anotacionesGrupo = me.anotacionesGrupo.concat(Utils.obtenerAnotacionesAjaxGrupo(grupo,offset));
-                numAnotacionesAcumuladas= anotacionesGrupo.length;
-            }
-
-            var anotFiltradas = _.filter(anotacionesGrupo, (anotacion) => (Utils.esPreguntaNotaTags(anotacion.tags)));
-
-            var preguntasAlumnosRep = _.map(anotFiltradas, (anotacion) => ({
-                'uri': anotacion.uri,
-                'pregunta': anotacion.tags[0].slice(18),
-                'nota': parseInt(anotacion.tags[1].slice(10))
-            }))
-            var preguntasAlumnos = _.uniqBy(preguntasAlumnosRep, (alumno) => (alumno.uri.concat(alumno.pregunta)));   //Se eliminan los repetidos
-
-            //Se obtienen los resultados de cada alumno
-            listaParAlumnoResultado = _(preguntasAlumnos).groupBy('uri')
-                .map((preguntas, alumno) => ({
-                    'uri': alumno,
-                    'resultado': (Utils.normalizar(anotacionesGrupo, _.sumBy(preguntas, 'nota')) >= 5) ? "Aprobado" : "Suspenso"
-                })).value();
+            })
         }
-        if (grupo=="78AJ6wx7"){
-            listaParAlumnoResultado = this.notas3Examen;
-        } else if (grupo=="YjymyPqK"){
-            listaParAlumnoResultado = this.notas4Examen;
-        }
-        return listaParAlumnoResultado;
     }
 }
 
