@@ -14,7 +14,7 @@ class HypothesisClientManager {
     this.reloadInterval = null
   }
 
-    /**
+  /**
      * Hypothes.is client manager initializer, creates the client and the events required to ask for the current user hypothes.is token
      * @param callback The callback of this method, if any error happened during initialization an error param is send as first parameter
      */
@@ -36,7 +36,7 @@ class HypothesisClientManager {
     })
   }
 
-    /**
+  /**
      * Reloads the hypothes.is client with the current user hypothes.is token (if logged in)
      * @param callback
      */
@@ -57,7 +57,7 @@ class HypothesisClientManager {
     })
   }
 
-    /**
+  /**
      * Returns if the current user is logged in hypothes.is
      * @returns {boolean}
      */
@@ -65,7 +65,7 @@ class HypothesisClientManager {
     return !_.isEmpty(this.hypothesisToken)
   }
 
-    /**
+  /**
      * Destroys all the functionality created in init()
      * @param callback
      */
