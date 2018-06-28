@@ -85,9 +85,8 @@ class SankeyDiagram {
     let preguntasCopia = _.clone(this.preguntasExamen)
     let examenesCopia = _.clone(this.restoExamenes)
     this.dibujarGraficoSankey(graphSinRestoExamenes, preguntasCopia, examenesCopia, anotaciones)
-
     // Obtener el resto de enlaces para dibujar el nuevo diagrama
-    // this.obtenerLinksRestoExamenes(graphSinRestoExamenes)
+    this.obtenerLinksRestoExamenes(graphSinRestoExamenes)
   }
 
   obtenerNodos (tags) {
@@ -267,7 +266,6 @@ class SankeyDiagram {
       // Este codigo es debido a que se han utilizado la id de los nodos (un string en vez de un entero) en el source y target de los links -> https://stackoverflow.com/questions/14629853/json-representation-for-d3-force-directed-networks
       let nodeMap = {}
       grafo.nodes.forEach(function (x) { nodeMap[x.id] = x })
-      console.log('graph', grafo)
       grafo.links = grafo.links.map(function (x) {
         return {
           source: nodeMap[x.source],
@@ -513,7 +511,7 @@ class SankeyDiagram {
     let graph = _.clone(grafo)
     window.markAndGoViz.hypothesisClientManager.hypothesisClient.getListOfGroups({}, (err, grupos) => {
       if (err) {
-
+        // TODO Handle error
       } else {
         let gruposId = _.map(grupos, 'id')
         _.pull(gruposId, grupoActual) // Elimina el grupo actual de la lista de grupos
@@ -523,68 +521,77 @@ class SankeyDiagram {
         let promises = []
         for (let i = 0; i < gruposId.length; i++) {
           promises.push(new Promise((resolve, reject) => {
-            this.resultados(gruposId[i], (resultadosExamenDestino) => {
-              if (resultadosExamenDestino.length > 0) { // Si se ha devuelto una lista vacia se debe a que el grupo no era de un examen
-                // Añade a cada alumno en la lista resultadosExamenOrigen el resultado del examen obtenidos en resultadosExamenDestino.
-                // Para diferenciar el nombre de los atributos, al resultado del origen se le llama "resultadoFinal" y al de destino "resultado"
-                let preguntasAlumnosConResultado = _.map(resultadosExamenOrigen, function (alumno) {
-                  return _.assign(alumno, _.find(resultadosExamenDestino, {
-                    uri: alumno.uri
-                  }))
-                })
-                // Obtiene los aprobados en el examen de origen y cuenta los distintos resultados en el examen de destino.
-                // Puede ocurrir que en el de destino no se haya presentado un alumno y en ese caso en el countBy se genera un atributo undefined que hay que omitir.
-                let linkAprobados = _(preguntasAlumnosConResultado).filter({'resultadoFinal': 'Aprobado'}).countBy('resultado').omit('undefined')
-                  .map((count, mark) => ({
-                    'source': grupoActual.concat('Aprobado'),
-                    'target': gruposId[i].concat(mark),
-                    'value': count,
-                    'resultadoFinal': mark
-                  })).value()
-
-                let linkSuspensos = _(preguntasAlumnosConResultado).filter({'resultadoFinal': 'Suspenso'}).countBy('resultado')
-                  .omit('undefined').map((count, mark) => ({
-                    'source': grupoActual.concat('Suspenso'),
-                    'target': gruposId[i].concat(mark),
-                    'value': count,
-                    'resultadoFinal': mark
-                  })).value()
-
-                enlaces = _.concat(enlaces, linkAprobados)
-                enlaces = _.concat(enlaces, linkSuspensos)
-
-                // El grupo de destino pasa a ser el grupo actual y los resultados del examen destino se convierten en origen
-                // (se cambia el nombre del atributo 'resultado' a 'resultadoFinal').
-                if (enlaces.length > 0) {
-                  nodos = _.concat(nodos, [{
-                    'id': gruposId[i].concat('Aprobado'),
-                    'name': 'Aprobado'
-                  }, {'id': gruposId[i].concat('Suspenso'), 'name': 'Suspenso'}])
-
-                  this.resultadosAlumnos.push({examen: gruposId[i], resultados: _.clone(resultadosExamenDestino)})
-
-                  grupoActual = gruposId[i]
-                  resultadosExamenOrigen = _.map(resultadosExamenDestino, resultado => ({
-                    'uri': resultado.uri,
-                    'resultadoFinal': resultado.resultado
-                  }))
-                  this.restoExamenes.push(gruposId[i])
-                }
+            this.resultados(gruposId[i], (err, resultadosExamen) => {
+              if (err) {
+                reject(err)
+              } else {
+                resolve(resultadosExamen)
               }
-              resolve()
             })
           }))
         }
         // Ejecutamos los promises y refrescamos el gráfico
-        Promise.all(promises).then(() => {
+        Promise.all(promises).then((resolves) => {
+          // Filter all the group results which are not exams
+          let exams = _.filter(resolves, (resolve) => { return resolve.listaParAlumnoResultado.length > 0 })
+          // For first iteration the former exam is the exam of the current group in hypothes.is group page
+          let originExam = {group: this.group, listaParAlumnoResultado: _.clone(this.resultadoFinalAlumnos)}
+          // For each group we must create a column in the alluvial, for that, we need to create links and nodes
+          for (let i = 0; i < exams.length; i++) {
+            let targetExam = exams[i]
+            // Añade a cada alumno en la lista resultadosExamenOrigen el resultado del examen obtenidos en resultadosExamenDestino.
+            // Para diferenciar el nombre de los atributos, al resultado del origen se le llama "resultadoFinal" y al de destino "resultado"
+            let preguntasAlumnosConResultado = _.map(resultadosExamenOrigen, function (alumno) {
+              return _.assign(alumno, _.find(targetExam.listaParAlumnoResultado, {
+                uri: alumno.uri
+              }))
+            })
+            debugger
+            // Obtiene los aprobados en el examen de origen y cuenta los distintos resultados en el examen de destino.
+            // Puede ocurrir que en el de destino no se haya presentado un alumno y en ese caso en el countBy se genera un atributo undefined que hay que omitir.
+            let linkAprobados = _(preguntasAlumnosConResultado).filter({'resultadoFinal': 'Aprobado'}).countBy('resultado').omit('undefined')
+              .map((count, mark) => ({
+                'source': originExam.group.concat('Aprobado'),
+                'target': targetExam.group.concat(mark),
+                'value': count,
+                'resultadoFinal': mark
+              })).value()
+
+            let linkSuspensos = _(preguntasAlumnosConResultado).filter({'resultadoFinal': 'Suspenso'}).countBy('resultado')
+              .omit('undefined').map((count, mark) => ({
+                'source': originExam.group.concat('Suspenso'),
+                'target': targetExam.group.concat(mark),
+                'value': count,
+                'resultadoFinal': mark
+              })).value()
+            // Append links
+            enlaces = _.concat(enlaces, linkAprobados)
+            enlaces = _.concat(enlaces, linkSuspensos)
+
+            // Create nodes
+            nodos = _.concat(nodos, [{
+              'id': targetExam.group.concat('Aprobado'),
+              'name': 'Aprobado'
+            }, {'id': targetExam.group.concat('Suspenso'), 'name': 'Suspenso'}])
+
+            // Switch origin and target groups for next iteration
+            this.restoExamenes.push(targetExam)
+            originExam = targetExam
+
+            this.resultadosAlumnos.push({examen: targetExam.group, resultados: _.clone(targetExam.listaParAlumnoResultado)})
+          }
+
           graph.nodes = _.concat(graph.nodes, nodos)
           graph.links = _.concat(graph.links, enlaces)
           this.nodesRestoExamenes = nodos // Se guardan los enlaces del resto de examenes
           this.linksRestoExamenes = enlaces // Se guardan nos nodos del resto de examenes
           this.graphOriginal = {nodes: graph.nodes, links: graph.links} // Se guarda el grafo original
           let preguntasCopia = _.clone(this.preguntasExamen)
-          this.dibujarGraficoSankey(graph, preguntasCopia, _.clone(this.restoExamenes), anotaciones)
-          d3.select('#dv').append('button').attr('id', 'refrescar').text('Refrescar').on('click', (d) => this.dibujarGraficoSankey(_.clone(this.graphOriginal), _.clone(this.preguntasExamen), examenes, anotaciones))
+          this.dibujarGraficoSankey(graph, preguntasCopia, _.clone(this.restoExamenes), this.anotaciones)
+          d3.select('#dv').append('button').attr('id', 'refrescar').text('Refrescar').on('click', (d) => this.dibujarGraficoSankey(_.clone(this.graphOriginal), _.clone(this.preguntasExamen), this.examenes, this.anotaciones))
+        }).catch((rejects) => {
+          // TODO Handle error
+          debugger
         })
       }
     })
@@ -642,29 +649,38 @@ class SankeyDiagram {
     // Grupos con examenes ficticios
     if (grupo === '78AJ6wx7') {
       if (_.isFunction(callback)) {
-        callback(this.notas3Examen)
+        callback(null, {group: grupo, listaParAlumnoResultado: this.notas3Examen})
       }
     } else if (grupo === 'YjymyPqK') {
       if (_.isFunction(callback)) {
-        callback(this.notas4Examen)
+        callback(null, {group: grupo, listaParAlumnoResultado: this.notas4Examen})
       }
     } else {
       // Grupo real en hypothes.is con examen
       window.markAndGoViz.hypothesisClientManager.hypothesisClient.searchAnnotations({
         group: grupo,
         limit: 1
-      }, (err, primeraAnotacion) => {
+      }, (err, resultAnnotations) => {
         if (err) {
-          // TODO Handle the error
+          // Handle the error
+          if (_.isFunction(callback)) {
+            callback(err)
+          }
         } else {
-          if (primeraAnotacion.total > 0 && primeraAnotacion.rows[0].tags.length > 0 && primeraAnotacion.rows[0].tags[0].substring(0, 4) == 'exam') {
+          let formerAnnotation = resultAnnotations[0]
+          // Check if the group is an exam group
+          if (_.isObject(formerAnnotation) && formerAnnotation.tags.length > 0 && formerAnnotation.tags[0].includes('exam:')) {
             window.markAndGoViz.hypothesisClientManager.hypothesisClient.searchAnnotations({
-              group: grupo
+              group: grupo,
+              limit: 5000
             }, (err, anotacionesGrupo) => {
               if (err) {
-                // TODO Handle the error
+                // Handle the error
+                if (_.isFunction(callback)) {
+                  callback(err)
+                }
               } else {
-                let anotFiltradas = _.filter(this.anotacionesGrupo, (anotacion) => (Utils.esPreguntaNotaTags(anotacion.tags)))
+                let anotFiltradas = _.filter(anotacionesGrupo, (anotacion) => (Utils.esPreguntaNotaTags(anotacion.tags)))
 
                 let preguntasAlumnosRep = _.map(anotFiltradas, (anotacion) => ({
                   'uri': anotacion.uri,
@@ -674,16 +690,18 @@ class SankeyDiagram {
                 let preguntasAlumnos = _.uniqBy(preguntasAlumnosRep, (alumno) => (alumno.uri.concat(alumno.pregunta))) // Se eliminan los repetidos
 
                 // Se obtienen los resultados de cada alumno
-                listaParAlumnoResultado = _(preguntasAlumnos).groupBy('uri')
+                let listaParAlumnoResultado = _(preguntasAlumnos).groupBy('uri')
                   .map((preguntas, alumno) => ({
                     'uri': alumno,
                     'resultado': (Utils.normalizar(anotacionesGrupo, _.sumBy(preguntas, 'nota')) >= 5) ? 'Aprobado' : 'Suspenso'
                   })).value()
                 if (_.isFunction(callback)) {
-                  callback(listaParAlumnoResultado)
+                  callback(null, {group: grupo, listaParAlumnoResultado: listaParAlumnoResultado})
                 }
               }
             })
+          } else {
+            callback(null, {group: grupo, listaParAlumnoResultado: []})
           }
         }
       })
