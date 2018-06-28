@@ -13,9 +13,8 @@ class SankeyDiagram {
      * @param {Object} group The hypothes.is group object, including id, name, etc. See response of https://h.readthedocs.io/en/latest/api-reference/#operation/listGroups
      */
   constructor (group) {
-    /// //////////////// Funciones para crear el diagrama Alluvial ////////////////////////
     this.graphOriginal = [] // Grafo original al que regresar a la hora de refrescar
-    this.linksRestoExamenes = [] // Linsks que relacionan los examenes de la asignatura
+    this.linksRestoExamenes = [] // Links que relacionan los examenes de la asignatura
     this.nodesRestoExamenes = [] // Nodos de los examenes de la asignatura
     this.resultadoFinalAlumnos = [] // Notas finales de los alumnos en el examen actual
     this.preguntasExamen = [] // Preguntas del examen actual
@@ -25,6 +24,9 @@ class SankeyDiagram {
     this.group = group
     this.notas3Examen = require('./Notas3Examen')
     this.notas4Examen = require('./Notas4Examen')
+    this.anotaciones = []
+    this.graphCopy = null
+    this.examenes = []
   }
 
   /**
@@ -56,10 +58,11 @@ class SankeyDiagram {
      */
 
   /**
-     *
+     * Creates the chart and inserts it in the hypothes.is website
      * @param anotaciones
      */
   createChart (anotaciones) {
+    this.anotaciones = anotaciones
     // Filtramos las anotaciones para obtener solo las que tienen 2 tags -> "isCriteriaOf" y "mark"
     let anotFiltradas = _.filter(anotaciones, (anotacion) => (Utils.filtradoTags(anotacion.tags)))
 
@@ -84,7 +87,7 @@ class SankeyDiagram {
     this.dibujarGraficoSankey(graphSinRestoExamenes, preguntasCopia, examenesCopia, anotaciones)
 
     // Obtener el resto de enlaces para dibujar el nuevo diagrama
-    this.obtenerLinksRestoExamenes(graphSinRestoExamenes)
+    // this.obtenerLinksRestoExamenes(graphSinRestoExamenes)
   }
 
   obtenerNodos (tags) {
@@ -103,7 +106,7 @@ class SankeyDiagram {
     return nodes
   }
 
-  obtenerLinks (preguntas, anotFiltradas, anotaciones) {
+  obtenerLinks (preguntas, anotFiltradas) {
     // A raiz de las anotaciones creamos una lista de objetos que contienen la uri del alumno, una pregunta y la nota obtenida. Pueden existir objetos repetidos ya que para varias preguntas existen varias anotaciones
     let preguntasAlumnosRep = _.map(anotFiltradas, (anotacion) => ({
       'uri': anotacion.uri,
@@ -118,7 +121,7 @@ class SankeyDiagram {
     this.resultadoFinalAlumnos = _(preguntasAlumnosRep).groupBy('uri')
       .map((preguntas, alumno) => ({
         'uri': alumno,
-        'resultadoFinal': (Utils.normalizar(anotaciones, _.sumBy(preguntas, 'nota')) >= 5) ? 'Aprobado' : 'Suspenso' // Nos servira para saber de color pintar los links
+        'resultadoFinal': (Utils.normalizar(this.anotaciones, _.sumBy(preguntas, 'nota')) >= 5) ? 'Aprobado' : 'Suspenso' // Nos servira para saber de color pintar los links
       })).value()
 
     // Cogemos las preguntas de cada alumno de 'preguntasAlumnos' y le indicamos si al final aprobaron o no
@@ -207,13 +210,15 @@ class SankeyDiagram {
     let units = 'Alumnos' // Unidad/valor de la anchura de las lineas
 
     // Recalcular la anchura del diagrama segun el numero de columnas
-    let plusAnchura
-    if ((preguntas.length + examenes.length) > 6) { plusAnchura = 130 } else { plusAnchura = 70 }
+    let plusAnchura = 70
+    if ((preguntas.length + this.examenes.length) > 6) {
+      plusAnchura = 130
+    }
 
     // Margenes, altura y anchura
     let margin = {top: 6, right: 70, bottom: 5, left: 20}
 
-    let width = 700 + (preguntas.length + examenes.length) * plusAnchura - margin.left - margin.right
+    let width = 700 + (preguntas.length + this.examenes.length) * plusAnchura - margin.left - margin.right
 
     let height = 560 - margin.top - margin.bottom
 
@@ -224,7 +229,7 @@ class SankeyDiagram {
     // Dado un numero le da un formato
 
     let color = d3.scale.category20() // Da acceso a una escala de colores
-    let graphCopy = _.clone(grafo)
+    this.graphCopy = _.clone(grafo)
     d3.select('#dv').remove()
     d3.select('#dvdesplegables').remove()
     d3.select('#svgbotonesEliminar').remove()
@@ -316,16 +321,16 @@ class SankeyDiagram {
         .enter()
         .append('select')
         .attr('class', 'desplegablePreguntas')
-        .attr('id', function (d, i) { return 'desplegable' + i })
-        .style('width', function (d, i) { return (distancia < 180) ? ((distancia * 0.7) + 'px') : '180px' })
-        .style('margin-right', function (d, i) { return (distancia < 180) ? ((distancia * 0.3) + 'px') : (distancia - 180) + 'px' })
-        .on('change', function (d, i) { return this.intercambiar(preguntas[i]) })
+        .attr('id', (d, i) => { return 'desplegable' + i })
+        .style('width', (d, i) => { return (distancia < 180) ? ((distancia * 0.7) + 'px') : '180px' })
+        .style('margin-right', (d, i) => { return (distancia < 180) ? ((distancia * 0.3) + 'px') : (distancia - 180) + 'px' })
+        .on('change', (d, i) => { return this.intercambiar(preguntas[i]) })
         .selectAll('option')
         .data(preguntas)
         .enter()
         .append('option')
-        .attr('value', function (d) { return d })
-        .text(function (d) { return d })
+        .attr('value', (d) => { return d })
+        .text((d) => { return d })
 
       // Se establece el valor de cada una de las listas desplegables
       for (let i = 0; i < preguntas.length; i++) {
@@ -334,19 +339,19 @@ class SankeyDiagram {
           .append('title')
           .text(preguntas[i])
       }
-      let gruposNombre = _.filter(this.gruposNombreID, (grupo) => (examenes.includes(grupo.id)))
+      let gruposNombre = _.filter(this.gruposNombreID, (grupo) => (this.examenes.includes(grupo.id)))
 
       // Se añade una lista desplegable en cada columna de nodos correspondiente al resto de examenes
       dvdesplegables
         .selectAll('select.desplegableExamenes')
-        .data(examenes)
+        .data(this.examenes)
         .enter()
         .append('select')
         .attr('class', 'desplegableExamenes')
         .attr('id', function (d, i) { return 'desplegableExamen' + i })
         .style('width', function (d, i) { return (distancia < 180) ? ((distancia * 0.7) + 'px') : '180px' })
-        .style('margin-left', function (d, i) { if (distancia < 180) { if (i == 0) { return distancia * 0.7 + 'px' } else { return ((distancia * 0.3) + 'px') } } else { if (i == 0) { return (distancia * 1.25 - 180) + 'px' } else { return (distancia - 180) + 'px' } } })
-        .on('change', function (d, i) { return this.intercambiarExamen(examenes[i]) })
+        .style('margin-left', function (d, i) { if (distancia < 180) { if (i === 0) { return distancia * 0.7 + 'px' } else { return ((distancia * 0.3) + 'px') } } else { if (i == 0) { return (distancia * 1.25 - 180) + 'px' } else { return (distancia - 180) + 'px' } } })
+        .on('change', function (d, i) { return this.intercambiarExamen(this.examenes[i]) })
         .selectAll('option')
         .data(gruposNombre)
         .enter()
@@ -355,11 +360,11 @@ class SankeyDiagram {
         .text(function (d) { return d.nombre })
 
       // Se establece el valor de cada una de las listas desplegables
-      for (let i = 0; i < examenes.length; i++) {
+      for (let i = 0; i < this.examenes.length; i++) {
         d3.select('#desplegableExamen' + i)
-          .property('value', examenes[i])
+          .property('value', this.examenes[i])
           .append('title')
-          .text(examenes[i])
+          .text(this.examenes[i])
       }
 
       // Añade un boton con la imagen previa para eliminar una columna de nodos
@@ -378,19 +383,18 @@ class SankeyDiagram {
         .on('mouseout', tooltip.hide)
         .on('click', (d, i) => {
           if (preguntas.length > 1) {
-            _.remove(preguntas, function (n) {
-              return n === d
+            _.remove(preguntas, (n) => {
+              return n === d
             })
             let nodes = _.filter(grafo.nodes, (nodo) => (!nodo.id.includes(d)))
             let anotFiltradas = _.filter(anotaciones, (anotacion) => (Utils.esPreguntaNotaTags(anotacion.tags)))
             let links = this.obtenerLinks(preguntas, anotFiltradas, anotaciones)
             let nuevoGrafo = {nodes: nodes, links: _.concat(links, _.clone(this.linksRestoExamenes))}
-            this.dibujarGraficoSankey(nuevoGrafo, preguntas, examenes, anotaciones)
+            this.dibujarGraficoSankey(nuevoGrafo, preguntas, this.examenes, anotaciones)
           } else {
             alert('Es necesario que haya al menos una pregunta.')
           }
         })
-
       // Añadimos los enlaces (links) en el diagrama
       let link = svg.append('g').selectAll('.link')
         .data(grafo.links)
@@ -398,7 +402,7 @@ class SankeyDiagram {
         .attr('class', 'link')
         .attr('d', path)
         .style('stroke', function (d) {
-          return d.resultadoFinal == 'Aprobado' ? 'green' : 'red'
+          return d.resultadoFinal === 'Aprobado' ? 'green' : 'red'
         })
         .style('stroke-width', function (d) { return Math.max(1, d.dy) })
         .sort(function (a, b) { return b.dy - a.dy })
@@ -430,8 +434,9 @@ class SankeyDiagram {
       node.append('rect')
         .attr('height', (d) => d.dy)
         .attr('width', sankey.nodeWidth())
-        .style('fill', function (d) {
-          return d.color = color(d.name.replace(/ .*/, ''))
+        .style('fill', (d) => {
+          d.color = color(d.name.replace(/ .*/, ''))
+          return d.color
         })
         .style('stroke', function (d) {
           return d3.rgb(d.color).darker(2)
@@ -467,32 +472,38 @@ class SankeyDiagram {
     })(grafo)
   }
 
-  // Intercambia la posicion de dos preguntas y actualiza el diagrama
+  /**
+   * Intercambia la posicion de dos preguntas y actualiza el diagrama
+   */
   intercambiar (defecto) {
-    let pos1 = preguntas.indexOf(defecto)
+    let pos1 = this.preguntasExamen.indexOf(defecto)
     let selectValue = d3.select('#desplegable' + pos1).property('value')
-    let pos2 = preguntas.indexOf(selectValue)
-    preguntas[pos1] = selectValue
-    preguntas[pos2] = defecto
-    let anotFiltradas = _.filter(anotaciones, (anotacion) => { Utils.esPreguntaNotaTags(anotacion.tags) })
-    let links = this.obtenerLinks(preguntas, anotFiltradas)
-    let grafoNuevo = {nodes: _.clone(graphCopy.nodes), links: _.concat(links, _.clone(this.linksRestoExamenes))}
-    this.dibujarGraficoSankey(grafoNuevo, preguntas, examenes, anotaciones)
+    let pos2 = this.preguntasExamen.indexOf(selectValue)
+    this.preguntasExamen[pos1] = selectValue
+    this.preguntasExamen[pos2] = defecto
+    let anotFiltradas = _.filter(this.anotaciones, (anotacion) => {
+      return Utils.filtradoTags(anotacion.tags)
+    })
+    let links = this.obtenerLinks(this.preguntasExamen, anotFiltradas)
+    let grafoNuevo = {nodes: _.clone(this.graphCopy.nodes), links: _.concat(links, _.clone(this.linksRestoExamenes))}
+    this.dibujarGraficoSankey(grafoNuevo, this.preguntasExamen, this.examenes, this.anotaciones)
   }
 
-  // Intercambia la posicion de dos examenes y actualiza el diagrama
+  /**
+   * Intercambia la posicion de dos examenes y actualiza el diagrama
+   */
   intercambiarExamen (examen) {
-    let pos1 = examenes.indexOf(examen)
+    let pos1 = this.examenes.indexOf(examen)
     let selectValue = d3.select('#desplegableExamen' + pos1).property('value')
-    let pos2 = examenes.indexOf(selectValue)
-    examenes[pos1] = selectValue
-    examenes[pos2] = examen
+    let pos2 = this.examenes.indexOf(selectValue)
+    this.examenes[pos1] = selectValue
+    this.examenes[pos2] = examen
     let grupos = _.concat(_.clone(this.group), _.clone(_.clone(this.restoExamenes)))
     let enlacesEjercicios = _.filter(graphCopy.links, (link) => (!_.includes(grupos, link.source.slice(0, 8))))
-    let enlacesExamenes = this.actualizarLinksExamenes(examenes)
+    let enlacesExamenes = this.actualizarLinksExamenes(this.examenes)
     let grafoNuevo = {nodes: _.clone(graphCopy.nodes), links: _.concat(enlacesEjercicios, enlacesExamenes)}
     this.linksRestoExamenes = _.clone(enlacesExamenes)
-    this.dibujarGraficoSankey(grafoNuevo, preguntas, examenes, anotaciones)
+    this.dibujarGraficoSankey(grafoNuevo, preguntas, this.examenes, anotaciones)
   }
 
   obtenerLinksRestoExamenes (grafo) {
@@ -505,7 +516,7 @@ class SankeyDiagram {
 
       } else {
         let gruposId = _.map(grupos, 'id')
-        _.pull(gruposId, grupoActual) // Elimina el grupo actual de la lista de grupos
+        _.pull(gruposId, grupoActual) // Elimina el grupo actual de la lista de grupos
         let resultadosExamenOrigen = _.clone(this.resultadoFinalAlumnos)
         this.resultadosAlumnos.push({examen: grupoActual, resultados: _.clone(this.resultadoFinalAlumnos)})
         // Crear un promise por cada grupo, ya que las llamadas al servidor de hypothes.is siempre son asincronas
@@ -568,7 +579,7 @@ class SankeyDiagram {
         Promise.all(promises).then(() => {
           graph.nodes = _.concat(graph.nodes, nodos)
           graph.links = _.concat(graph.links, enlaces)
-          this.nodesRestoExamenes = nodos // Se guardan los enalces del resto de examenes
+          this.nodesRestoExamenes = nodos // Se guardan los enlaces del resto de examenes
           this.linksRestoExamenes = enlaces // Se guardan nos nodos del resto de examenes
           this.graphOriginal = {nodes: graph.nodes, links: graph.links} // Se guarda el grafo original
           let preguntasCopia = _.clone(this.preguntasExamen)
