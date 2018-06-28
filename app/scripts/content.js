@@ -70,8 +70,8 @@ class MarkAndGoVizForExamGroup {
     this.sankeyButton = document.createElement('input')
     this.sankeyButton.type = 'button'
     this.sankeyButton.id = 'botonSankey'
-    this.sankeyButton.value = 'Gráfico Alluvial'
-    this.sankeyButton.title = 'Puntuaciones por ejercicio'
+    this.sankeyButton.value = chrome.i18n.getMessage('alluvialDiagramButton')
+    this.sankeyButton.title = chrome.i18n.getMessage('alluvialDiagramButtonTitle')
     this.sankeyButton.addEventListener('click', () => {
       // TODO Must be change the name of this function to createSankeyButton
       this.sankeyDiagram.createChart(this.annotations)
@@ -81,8 +81,8 @@ class MarkAndGoVizForExamGroup {
     this.scatterButton = document.createElement('input')
     this.scatterButton.type = 'button'
     this.scatterButton.id = 'botonScatter'
-    this.scatterButton.value = 'Gráfico de dispersión'
-    this.scatterButton.title = 'Notas por examen'
+    this.scatterButton.value = chrome.i18n.getMessage('scatterPlotButton')
+    this.scatterButton.title = chrome.i18n.getMessage('scatterPlotButtonTitle')
     this.scatterButton.addEventListener('click', () => {
       // TODO Uncomment this when scatter button is developed
       // this.scatterButton.createScatterPlot()
