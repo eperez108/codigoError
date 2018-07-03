@@ -105,6 +105,12 @@ class SankeyDiagram {
     return nodes
   }
 
+  /**
+   * lksalkadsl
+   * @param preguntas
+   * @param anotFiltradas
+   * @returns {Array}
+   */
   obtenerLinks (preguntas, anotFiltradas) {
     // A raiz de las anotaciones creamos una lista de objetos que contienen la uri del alumno, una pregunta y la nota obtenida. Pueden existir objetos repetidos ya que para varias preguntas existen varias anotaciones
     let preguntasAlumnosRep = _.map(anotFiltradas, (anotacion) => ({
@@ -205,19 +211,19 @@ class SankeyDiagram {
     return links
   }
 
-  dibujarGraficoSankey (grafo, preguntas, examenes, anotaciones) {
+  dibujarGraficoSankey (grafo, preguntas, examenes, anotaciones = []) {
     let units = 'Alumnos' // Unidad/valor de la anchura de las lineas
 
     // Recalcular la anchura del diagrama segun el numero de columnas
     let plusAnchura = 70
-    if ((preguntas.length + this.examenes.length) > 6) {
+    if ((preguntas.length + examenes.length) > 6) {
       plusAnchura = 130
     }
 
     // Margenes, altura y anchura
     let margin = {top: 6, right: 70, bottom: 5, left: 20}
 
-    let width = 700 + (preguntas.length + this.examenes.length) * plusAnchura - margin.left - margin.right
+    let width = 700 + (preguntas.length + examenes.length) * plusAnchura - margin.left - margin.right
 
     let height = 560 - margin.top - margin.bottom
 
@@ -263,6 +269,7 @@ class SankeyDiagram {
 
     // Cargamos los datos obtenidos previamente para su posterior visualizacion
     ((grafo) => {
+      debugger // TODO Check it is not working with exams
       // Este codigo es debido a que se han utilizado la id de los nodos (un string en vez de un entero) en el source y target de los links -> https://stackoverflow.com/questions/14629853/json-representation-for-d3-force-directed-networks
       let nodeMap = {}
       grafo.nodes.forEach(function (x) { nodeMap[x.id] = x })
@@ -337,19 +344,19 @@ class SankeyDiagram {
           .append('title')
           .text(preguntas[i])
       }
-      let gruposNombre = _.filter(this.gruposNombreID, (grupo) => (this.examenes.includes(grupo.id)))
+      let gruposNombre = _.filter(this.gruposNombreID, (grupo) => (examenes.includes(grupo.id)))
 
       // Se añade una lista desplegable en cada columna de nodos correspondiente al resto de examenes
       dvdesplegables
         .selectAll('select.desplegableExamenes')
-        .data(this.examenes)
+        .data(examenes)
         .enter()
         .append('select')
         .attr('class', 'desplegableExamenes')
         .attr('id', function (d, i) { return 'desplegableExamen' + i })
         .style('width', function (d, i) { return (distancia < 180) ? ((distancia * 0.7) + 'px') : '180px' })
-        .style('margin-left', function (d, i) { if (distancia < 180) { if (i === 0) { return distancia * 0.7 + 'px' } else { return ((distancia * 0.3) + 'px') } } else { if (i == 0) { return (distancia * 1.25 - 180) + 'px' } else { return (distancia - 180) + 'px' } } })
-        .on('change', function (d, i) { return this.intercambiarExamen(this.examenes[i]) })
+        .style('margin-left', function (d, i) { if (distancia < 180) { if (i === 0) { return distancia * 0.7 + 'px' } else { return ((distancia * 0.3) + 'px') } } else { if (i === 0) { return (distancia * 1.25 - 180) + 'px' } else { return (distancia - 180) + 'px' } } })
+        .on('change', function (d, i) { return this.intercambiarExamen(examenes[i]) })
         .selectAll('option')
         .data(gruposNombre)
         .enter()
@@ -358,11 +365,11 @@ class SankeyDiagram {
         .text(function (d) { return d.nombre })
 
       // Se establece el valor de cada una de las listas desplegables
-      for (let i = 0; i < this.examenes.length; i++) {
+      for (let i = 0; i < examenes.length; i++) {
         d3.select('#desplegableExamen' + i)
-          .property('value', this.examenes[i])
+          .property('value', examenes[i])
           .append('title')
-          .text(this.examenes[i])
+          .text(examenes[i])
       }
 
       // Añade un boton con la imagen previa para eliminar una columna de nodos
@@ -385,10 +392,10 @@ class SankeyDiagram {
               return n === d
             })
             let nodes = _.filter(grafo.nodes, (nodo) => (!nodo.id.includes(d)))
-            let anotFiltradas = _.filter(anotaciones, (anotacion) => (Utils.esPreguntaNotaTags(anotacion.tags)))
-            let links = this.obtenerLinks(preguntas, anotFiltradas, anotaciones)
+            let anotFiltradas = _.filter(this.anotaciones, (anotacion) => (Utils.esPreguntaNotaTags(anotacion.tags)))
+            let links = this.obtenerLinks(preguntas, anotFiltradas, this.anotaciones)
             let nuevoGrafo = {nodes: nodes, links: _.concat(links, _.clone(this.linksRestoExamenes))}
-            this.dibujarGraficoSankey(nuevoGrafo, preguntas, this.examenes, anotaciones)
+            this.dibujarGraficoSankey(nuevoGrafo, preguntas, examenes, this.anotaciones)
           } else {
             alert('Es necesario que haya al menos una pregunta.')
           }
@@ -541,12 +548,11 @@ class SankeyDiagram {
             let targetExam = exams[i]
             // Añade a cada alumno en la lista resultadosExamenOrigen el resultado del examen obtenidos en resultadosExamenDestino.
             // Para diferenciar el nombre de los atributos, al resultado del origen se le llama "resultadoFinal" y al de destino "resultado"
-            let preguntasAlumnosConResultado = _.map(resultadosExamenOrigen, function (alumno) {
+            let preguntasAlumnosConResultado = _.map(originExam.listaParAlumnoResultado, (alumno) => {
               return _.assign(alumno, _.find(targetExam.listaParAlumnoResultado, {
                 uri: alumno.uri
               }))
             })
-            debugger
             // Obtiene los aprobados en el examen de origen y cuenta los distintos resultados en el examen de destino.
             // Puede ocurrir que en el de destino no se haya presentado un alumno y en ese caso en el countBy se genera un atributo undefined que hay que omitir.
             let linkAprobados = _(preguntasAlumnosConResultado).filter({'resultadoFinal': 'Aprobado'}).countBy('resultado').omit('undefined')
@@ -567,27 +573,29 @@ class SankeyDiagram {
             // Append links
             enlaces = _.concat(enlaces, linkAprobados)
             enlaces = _.concat(enlaces, linkSuspensos)
-
-            // Create nodes
-            nodos = _.concat(nodos, [{
-              'id': targetExam.group.concat('Aprobado'),
-              'name': 'Aprobado'
-            }, {'id': targetExam.group.concat('Suspenso'), 'name': 'Suspenso'}])
-
+            // TODO Check if it should be && or || -> all students has passed the exam, all students has failed the exam
+            if (linkAprobados.length > 0 && linkSuspensos.length > 0) {
+              // Create nodes
+              nodos = _.concat(nodos, [{
+                'id': targetExam.group.concat('Aprobado'),
+                'name': 'Aprobado'
+              }, {'id': targetExam.group.concat('Suspenso'), 'name': 'Suspenso'}])
+              this.restoExamenes.push(targetExam)
+              this.resultadosAlumnos.push({examen: targetExam.group, resultados: _.clone(targetExam.listaParAlumnoResultado)})
+            }
             // Switch origin and target groups for next iteration
-            this.restoExamenes.push(targetExam)
             originExam = targetExam
-
-            this.resultadosAlumnos.push({examen: targetExam.group, resultados: _.clone(targetExam.listaParAlumnoResultado)})
+            originExam.listaParAlumnoResultado = _.map(originExam.listaParAlumnoResultado, resultado => ({
+              'uri': resultado.uri,
+              'resultadoFinal': resultado.resultado
+            }))
           }
-
           graph.nodes = _.concat(graph.nodes, nodos)
           graph.links = _.concat(graph.links, enlaces)
-          this.nodesRestoExamenes = nodos // Se guardan los enlaces del resto de examenes
           this.linksRestoExamenes = enlaces // Se guardan nos nodos del resto de examenes
           this.graphOriginal = {nodes: graph.nodes, links: graph.links} // Se guarda el grafo original
           let preguntasCopia = _.clone(this.preguntasExamen)
-          this.dibujarGraficoSankey(graph, preguntasCopia, _.clone(this.restoExamenes), this.anotaciones)
+          this.dibujarGraficoSankey(graph, preguntasCopia, _.clone(this.restoExamenes))
           d3.select('#dv').append('button').attr('id', 'refrescar').text('Refrescar').on('click', (d) => this.dibujarGraficoSankey(_.clone(this.graphOriginal), _.clone(this.preguntasExamen), this.examenes, this.anotaciones))
         }).catch((rejects) => {
           // TODO Handle error
@@ -659,7 +667,7 @@ class SankeyDiagram {
       // Grupo real en hypothes.is con examen
       window.markAndGoViz.hypothesisClientManager.hypothesisClient.searchAnnotations({
         group: grupo,
-        limit: 1
+        limit: 1 // TODO Check if it should be ordered 'asc' or 'desc'
       }, (err, resultAnnotations) => {
         if (err) {
           // Handle the error
