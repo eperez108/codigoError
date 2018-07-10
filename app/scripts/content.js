@@ -1,7 +1,7 @@
 const _ = require('lodash')
 const HypothesisClient = require('hypothesis-api-client')
 const SankeyDiagram = require('./sankeyDiagramNew')
-const scatterPlot = require('./ScatterPlot')
+const ScatterPlot = require('./ScatterPlotNew')
 
 /**
  * The manager for the visualization of MarkAndGo charts attached to the hypothes.is/groups/*groupid*
@@ -52,6 +52,8 @@ class MarkAndGoVizForExamGroup {
         this.sankeyDiagram.init()
 
         // TODO Initialize scatter chart
+        this.scatterDiagram = new ScatterPlot(this.currentHypothesisGroupId)
+        this.scatterDiagram.init()
 
         // Create interface buttons
         this.createInterfaceButtons()
@@ -85,7 +87,7 @@ class MarkAndGoVizForExamGroup {
     this.scatterButton.title = chrome.i18n.getMessage('scatterPlotButtonTitle')
     this.scatterButton.addEventListener('click', () => {
       // TODO Uncomment this when scatter button is developed
-      // this.scatterButton.createScatterPlot()
+      this.scatterButton.createScatterPlot(this.annotations)
     })
 
     document.getElementsByClassName('search-results')[0].insertBefore(this.chartContainer, document.getElementsByClassName('search-results__list')[0])
