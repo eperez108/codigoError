@@ -100,9 +100,8 @@ class SankeyDiagram {
     let nodos = _.uniqBy(nodosRep, (nodo) => (nodo.id))
 
     // Ademas de los nodos previamente creados, tambien añadimos los nodos 'aprobado' y 'suspenso'
-    let nodes = _.concat(nodos, [{'id': this.group.concat('Aprobado'), 'name': 'Aprobado'}, {'id': this.group.concat('Suspenso'), 'name': 'Suspenso'}
+    return _.concat(nodos, [{'id': this.group.concat('Aprobado'), 'name': 'Aprobado'}, {'id': this.group.concat('Suspenso'), 'name': 'Suspenso'}
     ])
-    return nodes
   }
 
   /**
@@ -130,7 +129,7 @@ class SankeyDiagram {
       })).value()
 
     // Cogemos las preguntas de cada alumno de 'preguntasAlumnos' y le indicamos si al final aprobaron o no
-    let preguntasAlumnosConResultado = _.map(preguntasAlumnos, (obj) => {
+    _.map(preguntasAlumnos, (obj) => {
       return _.assign(obj, _.find(this.resultadoFinalAlumnos, {
         uri: obj.uri
       }))
@@ -212,6 +211,7 @@ class SankeyDiagram {
   }
 
   dibujarGraficoSankey (grafo, preguntas, examenes, anotaciones = []) {
+    let graphCopy = _.clone(grafo) // TODO Comment why we need to copy
     let units = 'Alumnos' // Unidad/valor de la anchura de las lineas
 
     // Recalcular la anchura del diagrama segun el numero de columnas
@@ -242,8 +242,8 @@ class SankeyDiagram {
     d3.select('#divGrafico').append('div').attr('id', 'dv')
 
     let dvsankey = d3.select('#divGrafico').append('div').attr('id', 'dvsankey')
-    let dvdesplegables = d3.select('#dvsankey').append('div').attr('id', 'dvdesplegables').style('width', (width + margin.left + margin.right) + 'px')
-    let svgbotonesEliminar = d3.select('#dvsankey').append('svg').attr('id', 'svgbotonesEliminar').attr('width', width + margin.left + margin.right)
+    let dvdesplegables = dvsankey.append('div').attr('id', 'dvdesplegables').style('width', (width + margin.left + margin.right) + 'px')
+    let svgbotonesEliminar = dvsankey.append('svg').attr('id', 'svgbotonesEliminar').attr('width', width + margin.left + margin.right)
       .attr('height', '18px')
 
     // Insertamos el SGV y establecemos sus medidas
@@ -265,216 +265,212 @@ class SankeyDiagram {
       .nodePadding(25)
       .size([width, height])
 
-    let path = sankey.link(); // un puntero a la función de sankey que hace que los enlaces entre los nodos se curven. en los lugares correctos.
+    let path = sankey.link() // un puntero a la función de sankey que hace que los enlaces entre los nodos se curven. en los lugares correctos.
 
     // Cargamos los datos obtenidos previamente para su posterior visualizacion
-    ((grafo) => {
-      debugger // TODO Check it is not working with exams
-      // Este codigo es debido a que se han utilizado la id de los nodos (un string en vez de un entero) en el source y target de los links -> https://stackoverflow.com/questions/14629853/json-representation-for-d3-force-directed-networks
-      let nodeMap = {}
-      grafo.nodes.forEach(function (x) { nodeMap[x.id] = x })
-      grafo.links = grafo.links.map(function (x) {
-        return {
-          source: nodeMap[x.source],
-          target: nodeMap[x.target],
-          value: x.value,
-          resultadoFinal: x.resultadoFinal
-        }
+    // Este codigo es debido a que se han utilizado la id de los nodos (un string en vez de un entero) en el source y target de los links -> https://stackoverflow.com/questions/14629853/json-representation-for-d3-force-directed-networks
+    let nodeMap = {}
+    graphCopy.nodes.forEach(function (x) { nodeMap[x.id] = x })
+    graphCopy.links = grafo.links.map(function (x) {
+      return {
+        source: nodeMap[x.source],
+        target: nodeMap[x.target],
+        value: x.value,
+        resultadoFinal: x.resultadoFinal
+      }
+    })
+
+    sankey.nodes(graphCopy.nodes)
+      .links(graphCopy.links)
+      .layout(12)
+
+    // Se obtienen las posiciones de las columnas de nodos
+    let posicion = _.sortBy(_.uniq(_.map(graphCopy.nodes, 'x')))
+    let distancia = posicion[1] - posicion[0]
+
+    let tooltip = d3Tip(d3) // Creacion del tooltip
+      .attr('class', 'd3tip')
+      .offset([-10, 0])
+      .html(function (d) {
+        return 'Eliminar pregunta'
       })
 
-      sankey
-        .nodes(grafo.nodes)
-        .links(grafo.links)
-        .layout(12)
+    // Crear un imagen con forma de cruz que servira para eliminar una pregunta
+    let imgUrl = 'https://png.icons8.com/metro/1600/delete-sign.png'
+    svg.append('defs')
+      .append('pattern')
+      .attr('id', 'venus')
+      .attr('width', 30)
+      .attr('height', 20)
+      .append('image')
+      .attr('xlink:href', imgUrl)
+      .attr('width', 30)
+      .attr('height', 20)
 
-      // Se obtienen las posiciones de las columnas de nodos
-      let posicion = _.sortBy(_.uniq(_.map(grafo.nodes, 'x')))
-      let distancia = posicion[1] - posicion[0]
+    svg.call(tooltip)
 
-      let tooltip = d3Tip(d3) // Creacion del tooltip
-        .attr('class', 'd3tip')
-        .offset([-10, 0])
-        .html(function (d) {
-          return 'Eliminar pregunta'
-        })
+    // Se añade una lista desplegable en cada columna de nodos correspondientes a las preguntas
+    dvdesplegables
+    /* .selectAll("div")
+           .data(preguntas)
+           .enter()
+           .append("div")
+           .attr("class","columName")
+           .attr("id",function (d,i) { return "columnName"+i;})
+           .style("float","left") */
+      .selectAll('select.desplegablePreguntas')
+      .data(preguntas)
+      .enter()
+      .append('select')
+      .attr('class', 'desplegablePreguntas')
+      .attr('id', (d, i) => { return 'desplegable' + i })
+      .style('width', (d, i) => { return (distancia < 180) ? ((distancia * 0.7) + 'px') : '180px' })
+      .style('margin-right', (d, i) => { return (distancia < 180) ? ((distancia * 0.3) + 'px') : (distancia - 180) + 'px' })
+      .on('change', (d, i) => { return this.intercambiar(preguntas[i]) })
+      .selectAll('option')
+      .data(preguntas)
+      .enter()
+      .append('option')
+      .attr('value', (d) => { return d })
+      .text((d) => { return d })
 
-      // Crear un imagen con forma de cruz que servira para eliminar una pregunta
-      let imgUrl = 'https://png.icons8.com/metro/1600/delete-sign.png'
-      svg.append('defs')
-        .append('pattern')
-        .attr('id', 'venus')
-        .attr('width', 30)
-        .attr('height', 20)
-        .append('image')
-        .attr('xlink:href', imgUrl)
-        .attr('width', 30)
-        .attr('height', 20)
-
-      svg.call(tooltip)
-
-      // Se añade una lista desplegable en cada columna de nodos correspondientes a las preguntas
-      dvdesplegables
-      /* .selectAll("div")
-             .data(preguntas)
-             .enter()
-             .append("div")
-             .attr("class","columName")
-             .attr("id",function (d,i) { return "columnName"+i;})
-             .style("float","left") */
-        .selectAll('select.desplegablePreguntas')
-        .data(preguntas)
-        .enter()
-        .append('select')
-        .attr('class', 'desplegablePreguntas')
-        .attr('id', (d, i) => { return 'desplegable' + i })
-        .style('width', (d, i) => { return (distancia < 180) ? ((distancia * 0.7) + 'px') : '180px' })
-        .style('margin-right', (d, i) => { return (distancia < 180) ? ((distancia * 0.3) + 'px') : (distancia - 180) + 'px' })
-        .on('change', (d, i) => { return this.intercambiar(preguntas[i]) })
-        .selectAll('option')
-        .data(preguntas)
-        .enter()
-        .append('option')
-        .attr('value', (d) => { return d })
-        .text((d) => { return d })
-
-      // Se establece el valor de cada una de las listas desplegables
-      for (let i = 0; i < preguntas.length; i++) {
-        d3.select('#desplegable' + i)
-          .property('value', preguntas[i])
-          .append('title')
-          .text(preguntas[i])
-      }
-      let gruposNombre = _.filter(this.gruposNombreID, (grupo) => (examenes.includes(grupo.id)))
-
-      // Se añade una lista desplegable en cada columna de nodos correspondiente al resto de examenes
-      dvdesplegables
-        .selectAll('select.desplegableExamenes')
-        .data(examenes)
-        .enter()
-        .append('select')
-        .attr('class', 'desplegableExamenes')
-        .attr('id', function (d, i) { return 'desplegableExamen' + i })
-        .style('width', function (d, i) { return (distancia < 180) ? ((distancia * 0.7) + 'px') : '180px' })
-        .style('margin-left', function (d, i) { if (distancia < 180) { if (i === 0) { return distancia * 0.7 + 'px' } else { return ((distancia * 0.3) + 'px') } } else { if (i === 0) { return (distancia * 1.25 - 180) + 'px' } else { return (distancia - 180) + 'px' } } })
-        .on('change', function (d, i) { return this.intercambiarExamen(examenes[i]) })
-        .selectAll('option')
-        .data(gruposNombre)
-        .enter()
-        .append('option')
-        .attr('value', function (d) { return d.id })
-        .text(function (d) { return d.nombre })
-
-      // Se establece el valor de cada una de las listas desplegables
-      for (let i = 0; i < examenes.length; i++) {
-        d3.select('#desplegableExamen' + i)
-          .property('value', examenes[i])
-          .append('title')
-          .text(examenes[i])
-      }
-
-      // Añade un boton con la imagen previa para eliminar una columna de nodos
-      svgbotonesEliminar.selectAll('rect')
-        .data(preguntas)
-        .enter()
-        .append('rect')
-        .attr('class', 'button')
-        .attr('fill', 'url(#venus)')
-        .attr('x', (d, i) => posicion[i] + 10)
-        .attr('width', 30)
-        .attr('height', 20)
-        .attr('rx', 10)
-        .attr('ry', 10)
-        .on('mouseover', tooltip.show)
-        .on('mouseout', tooltip.hide)
-        .on('click', (d, i) => {
-          if (preguntas.length > 1) {
-            _.remove(preguntas, (n) => {
-              return n === d
-            })
-            let nodes = _.filter(grafo.nodes, (nodo) => (!nodo.id.includes(d)))
-            let anotFiltradas = _.filter(this.anotaciones, (anotacion) => (Utils.esPreguntaNotaTags(anotacion.tags)))
-            let links = this.obtenerLinks(preguntas, anotFiltradas, this.anotaciones)
-            let nuevoGrafo = {nodes: nodes, links: _.concat(links, _.clone(this.linksRestoExamenes))}
-            this.dibujarGraficoSankey(nuevoGrafo, preguntas, examenes, this.anotaciones)
-          } else {
-            alert('Es necesario que haya al menos una pregunta.')
-          }
-        })
-      // Añadimos los enlaces (links) en el diagrama
-      let link = svg.append('g').selectAll('.link')
-        .data(grafo.links)
-        .enter().append('path')
-        .attr('class', 'link')
-        .attr('d', path)
-        .style('stroke', function (d) {
-          return d.resultadoFinal === 'Aprobado' ? 'green' : 'red'
-        })
-        .style('stroke-width', function (d) { return Math.max(1, d.dy) })
-        .sort(function (a, b) { return b.dy - a.dy })
-
-      // Añade un mensaje de texto que aparece al pasar el raton por encima de los enlaces (indica el origen, el destino y el valor)
-      link.append('title')
-        .text(function (d) {
-          return d.source.name + ' → ' +
-                        d.target.name + '\n' +
-                        d.resultadoFinal + ': ' + format(d.value)
-        })
-
-      // Añade los nodos (no los rectangulos ni el texto)
-      let node = svg.append('g').selectAll('.node')
-        .data(grafo.nodes)
-        .enter().append('g')
-        .attr('class', 'node')
-        .attr('transform', function (d) {
-          return 'translate(' + d.x + ',' + d.y + ')'
-        })
-        .call(d3.behavior.drag()
-          .origin(function (d) { return d })
-          .on('dragstart', function () {
-            this.parentNode.appendChild(this)
-          })
-          .on('drag', dragmove))
-
-      // Añadir los rectangulos a los nodos
-      node.append('rect')
-        .attr('height', (d) => d.dy)
-        .attr('width', sankey.nodeWidth())
-        .style('fill', (d) => {
-          d.color = color(d.name.replace(/ .*/, ''))
-          return d.color
-        })
-        .style('stroke', function (d) {
-          return d3.rgb(d.color).darker(2)
-        })
+    // Se establece el valor de cada una de las listas desplegables
+    for (let i = 0; i < preguntas.length; i++) {
+      d3.select('#desplegable' + i)
+        .property('value', preguntas[i])
         .append('title')
-        .text(function (d) {
-          return d.name + '\n' + format(d.value)
+        .text(preguntas[i])
+    }
+    let gruposNombre = _.filter(this.gruposNombreID, (grupo) => (examenes.includes(grupo.id)))
+
+    // Se añade una lista desplegable en cada columna de nodos correspondiente al resto de examenes
+    dvdesplegables
+      .selectAll('select.desplegableExamenes')
+      .data(examenes)
+      .enter()
+      .append('select')
+      .attr('class', 'desplegableExamenes')
+      .attr('id', function (d, i) { return 'desplegableExamen' + i })
+      .style('width', function (d, i) { return (distancia < 180) ? ((distancia * 0.7) + 'px') : '180px' })
+      .style('margin-left', function (d, i) { if (distancia < 180) { if (i === 0) { return distancia * 0.7 + 'px' } else { return ((distancia * 0.3) + 'px') } } else { if (i === 0) { return (distancia * 1.25 - 180) + 'px' } else { return (distancia - 180) + 'px' } } })
+      .on('change', function (d, i) { return this.intercambiarExamen(examenes[i]) })
+      .selectAll('option')
+      .data(gruposNombre)
+      .enter()
+      .append('option')
+      .attr('value', function (d) { return d.id })
+      .text(function (d) { return d.nombre })
+
+    // Se establece el valor de cada una de las listas desplegables
+    for (let i = 0; i < examenes.length; i++) {
+      d3.select('#desplegableExamen' + i)
+        .property('value', examenes[i])
+        .append('title')
+        .text(examenes[i])
+    }
+
+    // Añade un boton con la imagen previa para eliminar una columna de nodos
+    svgbotonesEliminar.selectAll('rect')
+      .data(preguntas)
+      .enter()
+      .append('rect')
+      .attr('class', 'button')
+      .attr('fill', 'url(#venus)')
+      .attr('x', (d, i) => posicion[i] + 10)
+      .attr('width', 30)
+      .attr('height', 20)
+      .attr('rx', 10)
+      .attr('ry', 10)
+      .on('mouseover', tooltip.show)
+      .on('mouseout', tooltip.hide)
+      .on('click', (d, i) => {
+        if (preguntas.length > 1) {
+          _.remove(preguntas, (n) => {
+            return n === d
+          })
+          let nodes = _.filter(graphCopy.nodes, (nodo) => (!nodo.id.includes(d)))
+          let anotFiltradas = _.filter(this.anotaciones, (anotacion) => (Utils.esPreguntaNotaTags(anotacion.tags)))
+          let links = this.obtenerLinks(preguntas, anotFiltradas, this.anotaciones)
+          let nuevoGrafo = {nodes: nodes, links: _.concat(links, _.clone(this.linksRestoExamenes))}
+          this.dibujarGraficoSankey(nuevoGrafo, preguntas, examenes, this.anotaciones)
+        } else {
+          alert('Es necesario que haya al menos una pregunta.')
+        }
+      })
+    // Añadimos los enlaces (links) en el diagrama
+    let link = svg.append('g').selectAll('.link')
+      .data(graphCopy.links)
+      .enter().append('path')
+      .attr('class', 'link')
+      .attr('d', path)
+      .style('stroke', function (d) {
+        return d.resultadoFinal === 'Aprobado' ? 'green' : 'red'
+      })
+      .style('stroke-width', function (d) { return Math.max(1, d.dy) })
+      .sort(function (a, b) { return b.dy - a.dy })
+
+    // Añade un mensaje de texto que aparece al pasar el raton por encima de los enlaces (indica el origen, el destino y el valor)
+    link.append('title')
+      .text(function (d) {
+        return d.source.name + ' → ' +
+          d.target.name + '\n' +
+          d.resultadoFinal + ': ' + format(d.value)
+      })
+
+    // Añade los nodos (no los rectangulos ni el texto)
+    let node = svg.append('g').selectAll('.node')
+      .data(graphCopy.nodes)
+      .enter().append('g')
+      .attr('class', 'node')
+      .attr('transform', function (d) {
+        return 'translate(' + d.x + ',' + d.y + ')'
+      })
+      .call(d3.behavior.drag()
+        .origin(function (d) { return d })
+        .on('dragstart', function () {
+          this.parentNode.appendChild(this)
         })
+        .on('drag', dragmove))
 
-      // Añadir titulo a los nodos
-      node.append('text')
-        .attr('x', -6)
-        .attr('y', (d) => d.dy / 2)
-        .attr('dy', '.35em')
-        .attr('text-anchor', 'end')
-        .attr('transform', null)
-        .text((d) => d.name)
-        .filter((d) => d.x < width / 2)
-        .attr('x', 6 + sankey.nodeWidth())
-        .attr('text-anchor', 'start')
+    // Añadir los rectangulos a los nodos
+    node.append('rect')
+      .attr('height', (d) => d.dy)
+      .attr('width', sankey.nodeWidth())
+      .style('fill', (d) => {
+        d.color = color(d.name.replace(/ .*/, ''))
+        return d.color
+      })
+      .style('stroke', function (d) {
+        return d3.rgb(d.color).darker(2)
+      })
+      .append('title')
+      .text(function (d) {
+        return d.name + '\n' + format(d.value)
+      })
 
-      // Funcion para mover los nodos
-      function dragmove (d) {
-        d3.select(this).attr('transform',
-          'translate(' + (
-            d.x = Math.max(0, Math.min(width - d.dx, d3.event.x))
-          ) + ',' + (
-            d.y = Math.max(0, Math.min(height - d.dy, d3.event.y))
-          ) + ')')
-        sankey.relayout()
-        link.attr('d', path)
-      }
-    })(grafo)
+    // Añadir titulo a los nodos
+    node.append('text')
+      .attr('x', -6)
+      .attr('y', (d) => d.dy / 2)
+      .attr('dy', '.35em')
+      .attr('text-anchor', 'end')
+      .attr('transform', null)
+      .text((d) => d.name)
+      .filter((d) => d.x < width / 2)
+      .attr('x', 6 + sankey.nodeWidth())
+      .attr('text-anchor', 'start')
+
+    // Funcion para mover los nodos
+    function dragmove (d) {
+      d3.select(this).attr('transform',
+        'translate(' + (
+          d.x = Math.max(0, Math.min(width - d.dx, d3.event.x))
+        ) + ',' + (
+          d.y = Math.max(0, Math.min(height - d.dy, d3.event.y))
+        ) + ')')
+      sankey.relayout()
+      link.attr('d', path)
+    }
   }
 
   /**
@@ -522,7 +518,6 @@ class SankeyDiagram {
       } else {
         let gruposId = _.map(grupos, 'id')
         _.pull(gruposId, grupoActual) // Elimina el grupo actual de la lista de grupos
-        let resultadosExamenOrigen = _.clone(this.resultadoFinalAlumnos)
         this.resultadosAlumnos.push({examen: grupoActual, resultados: _.clone(this.resultadoFinalAlumnos)})
         // Crear un promise por cada grupo, ya que las llamadas al servidor de hypothes.is siempre son asincronas
         let promises = []
@@ -574,7 +569,7 @@ class SankeyDiagram {
             enlaces = _.concat(enlaces, linkAprobados)
             enlaces = _.concat(enlaces, linkSuspensos)
             // TODO Check if it should be && or || -> all students has passed the exam, all students has failed the exam
-            if (linkAprobados.length > 0 && linkSuspensos.length > 0) {
+            if (linkAprobados.length > 0 || linkSuspensos.length > 0) {
               // Create nodes
               nodos = _.concat(nodos, [{
                 'id': targetExam.group.concat('Aprobado'),
@@ -582,13 +577,13 @@ class SankeyDiagram {
               }, {'id': targetExam.group.concat('Suspenso'), 'name': 'Suspenso'}])
               this.restoExamenes.push(targetExam)
               this.resultadosAlumnos.push({examen: targetExam.group, resultados: _.clone(targetExam.listaParAlumnoResultado)})
+              // Switch origin and target groups for next iteration
+              originExam = targetExam
+              originExam.listaParAlumnoResultado = _.map(originExam.listaParAlumnoResultado, resultado => ({
+                'uri': resultado.uri,
+                'resultadoFinal': resultado.resultado
+              }))
             }
-            // Switch origin and target groups for next iteration
-            originExam = targetExam
-            originExam.listaParAlumnoResultado = _.map(originExam.listaParAlumnoResultado, resultado => ({
-              'uri': resultado.uri,
-              'resultadoFinal': resultado.resultado
-            }))
           }
           graph.nodes = _.concat(graph.nodes, nodos)
           graph.links = _.concat(graph.links, enlaces)
@@ -599,7 +594,7 @@ class SankeyDiagram {
           d3.select('#dv').append('button').attr('id', 'refrescar').text('Refrescar').on('click', (d) => this.dibujarGraficoSankey(_.clone(this.graphOriginal), _.clone(this.preguntasExamen), this.examenes, this.anotaciones))
         }).catch((rejects) => {
           // TODO Handle error
-          debugger
+          alert('Unable to retrieve other exams marks')
         })
       }
     })
