@@ -9,71 +9,85 @@ class SpiderChart {
   constructor (group) { // Mirar despues los parametros
     this.anotacionesGrupo = []
     this.data = []
-    this.puntuacionMaximaGrupos = []
-    this.grupos = []
-    this.medias = []
-    this.preguntasAlumno = []
+    this.maximumValueGroups = []
+    this.groups = []
+    this.studentQuestions = []
     this.anotaciones = []
     this.anotFiltradas = []
-    this.gruposNombreID = []
-    this.LegendOptions = ['Alumno', 'Media de la clase']
+    this.groupsNameID = []
+    this.LegendOptions = ['Student', 'Class average']
     this.reloadInterval = {}
     this.loc = document.location.href
-    this.temp = document.location.href
+    this.intervalLeaveURL = []
+    this.intervalURL = []
     this.hypothesisClientManager = {}
   }
 
   init () {
     this.hypothesisClientManager.hypothesisClient = new HypothesisClient('6879-Q--ve1yLCItODnHueg4py6UT-qqq93bk-xgvra0-BVA')
-    if (this.loc.includes('https://drive.google.com/drive/folders/')) { // Comprobar de que se trata de una carpeta
+    // Check if it is a folder
+    if (this.loc.includes('https://drive.google.com/drive/folders/')) {
+      // Check if the folder belongs to a student
       // esAlumno(loc);
-      this.spiderChart()
+      // Create the spider chart
+      this.createSpiderChart()
+      this.intervalLeaveURL = setInterval(() => this.checkLeaveURL(this.loc), 2000)
+    } else {
+      // Otherwise check if the URL has changed
+      this.intervalURL = setInterval(() => this.checkURL(), 2000)
     }
-    // Comprobar si se ha cambiado de url
-    setInterval(() => this.comprobarURL(), 2000)
   }
 
-  comprobarURL () {
-    let locActual = document.location.href
-    if (this.loc !== locActual) {
-      if (locActual.includes('https://drive.google.com/drive/folders/')) {
+  // Function that checks if the URL has changed
+  checkURL () {
+    let currentLoc = document.location.href
+    // If the location has chenged, check if its a folder which belongs to a student
+    if (this.loc !== currentLoc) {
+      if (currentLoc.includes('https://drive.google.com/drive/folders/')) {
         // this.esAlumno(loc)
-        this.loc = locActual
-        this.temp = setInterval(() => this.comprobarSalidaURL(locActual), 3000)
-        this.spiderChart()
+        this.loc = currentLoc
+        clearInterval(this.intervalURL)
+        // Check if the user leaves the folder
+        this.intervalLeaveURL = setInterval(() => this.checkLeaveURL(currentLoc), 2000)
+        // Create the spider chart
+        this.createSpiderChart()
       }
-      this.loc = locActual
+      // Update the location
+      this.loc = currentLoc
     }
   }
 
-  comprobarSalidaURL (urlCarpeta) {
-    // debugger
-    let locActual = document.location.href
-    if (urlCarpeta !== locActual) {
+  // Funcion that checks if the user leaves the folder
+  checkLeaveURL (folderURL) {
+    let currentLoc = document.location.href
+    if (folderURL !== currentLoc) {
       d3.select('#divGraphic').remove()
-      clearInterval(this.temp)
-      this.comprobarURL()
+      clearInterval(this.intervalLeaveURL)
+      this.intervalURL = setInterval(() => this.checkURL(), 2000)
     }
   }
 
-  spiderChart () {
+  // Function that creates the spider chart
+  createSpiderChart () {
+    // Retrieve the user groups
     this.retrieveGroups((err, groups) => {
       if (err) {
       // Handle error
       } else {
-        this.gruposNombreID = _.map(groups, (grupo) => ({
-          'id': grupo.id,
-          'nombre': grupo.name
+        // Filter the retrieved groups to obtain only the ID and the name of each one
+        this.groupsNameID = _.map(groups, (group) => ({
+          'id': group.id,
+          'nombre': group.name
         }))
       }
     })
-    // Obtener anotaciones del usuario actual
+    // Retrieve current user annotations
     this.retrieveUserAnnotations((err, userAnnotations) => {
       if (err) {
 
       } else {
         this.data = []
-        let usAnor = {
+        let userAnot = {
           'rows': [
             {
               'updated': '2018-05-10T15:29:48.097300+00:00',
@@ -897,114 +911,114 @@ class SpiderChart {
           ],
           'total': 13
         }
-        // Se filtran las anotaciones para obtener solo las que tienen 2 tags -> "isCriteriaOf" y "mark"
-        let anotFiltradas = this.filtrarAnotaciones(usAnor)
-        // Se crea una estructura con el nombre del eje, el valor del alumno y el examen
-        let preguntasAlumnosRep = this.obtenerPreguntasAlumno(anotFiltradas)
-        // Se eliminan los objetos repetidos
-        this.preguntasAlumno = this.eliminarPreguntasRepetidas(preguntasAlumnosRep)
-        // Se obtienen los grupos del alumno
-        this.grupos = this.obtenerGrupos(anotFiltradas)
-        // Por cada grupo se obtiene la nota media de la clase en cada pregunta
+        // Filter annotations to get only those with 2 tags -> "isCriteriaOf" and "mark"
+        let filteredAnnotations = this.filterAnnotations(userAnot)
+        // Create a structure with the name of the axis that corresponds to the question, the value that corresponds the mark and the exam
+        let studentQuestionsRep = this.obtainStudentQuestions(filteredAnnotations)
+        // Filter the previously obtained list to eliminate the repeated objects
+        this.studentQuestions = this.deleteRepeatedQuestions(studentQuestionsRep)
+        // The groups to which the student belongs are obtained
+        this.groups = this.obtainGroups(filteredAnnotations)
+        // For each group, it gets the average grades of the class in each question
         let promises = []
-        for (let i = 0; i < this.grupos.length; i++) {
+        for (let i = 0; i < this.groups.length; i++) {
           promises.push(new Promise((resolve, reject) => {
-            this.obtenerMedias(this.grupos[i], (err, mediasExamen) => {
+            this.obtainAverageGrades(this.groups[i], (err, examAverageGrades) => {
               if (err) {
                 reject(err)
               } else {
-                resolve(mediasExamen)
+                resolve(examAverageGrades)
               }
             })
           }))
         }
-        // Ejecutamos los promises y refrescamos el gráfico
         Promise.all(promises).then((resolves) => {
-          this.medias = _.flatten(resolves)
-          // A cada nota del alumno se añade sobre cuanto era esa pregunta para poder calcular los porcentajes
-          this.data.push(_.sortBy(this.medias, 'axis'))
-          let preguntasAlumnoTotal = this.obtenerPorcentajes()
-          this.data.unshift(_.sortBy(preguntasAlumnoTotal, 'axis'))
-          // Comprobar que se ha creado el div donde se va a insertar el diagrama
-          this.reloadInterval = setInterval(() => { return this.myFunction() }, 3000)
+          let examAverageGrades = _.flatten(resolves)
+          // To each mark of the student, the maximum possible mark for that question is added to calculate the percentages
+          this.data.push(_.sortBy(examAverageGrades, 'axis'))
+          let totalStudentQuestions = this.obtainPorcentages()
+          this.data.unshift(_.sortBy(totalStudentQuestions, 'axis'))
+          // Check that the div where the diagram is going to be inserted is created
+          this.reloadInterval = setInterval(() => { return this.divIsReady() }, 3000)
         })
       }
     })
   }
 
-  // Comprueba que se ha creado el div donde se va a insertar el diagrama
-  myFunction () {
+  // function to check that the div where the diagram is going to be inserted is created
+  divIsReady () {
     if (document.getElementsByClassName('a-gd-x')[0]) {
       clearInterval(this.reloadInterval)
-      this.dibujarSpiderChart(this.data)
+      this.drawSpiderChart(this.data, this.LegendOptions)
     }
   }
 
-  // Obtiene las notas medias de cada pregunta de un examen
-  obtenerMedias (grupo, callback) {
-    // Obtener antaciones de un grupo
-    this.retrieveGroupAnnotations(grupo, (err, groupAnnotations) => {
+  // Obtain the average grades of each question of an exam
+  obtainAverageGrades (group, callback) {
+    // Obtain annotations of a group
+    this.retrieveGroupAnnotations(group, (err, groupAnnotations) => {
       if (err) {
         // Handle the error
         if (_.isFunction(callback)) {
           callback(err)
         }
       } else {
-        // Se filtran las anotaciones para obtener solo las que tienen 2 tags -> "isCriteriaOf" y "mark"
-        let anotGrupoFiltradas = _.filter(groupAnnotations, (anotacion) => (Utils.filtradoTags(anotacion.tags)))
-        // De cada anotacion se guarda la uri del alumno, la pregunta y la nota
-        let preguntasAlumnosGrupoRep = _.map(anotGrupoFiltradas, (anotacion) => ({
-          'uri': anotacion.uri,
-          'pregunta': anotacion.tags[0].slice(18),
-          'nota': parseInt(anotacion.tags[1].slice(10))
+        // Filter annotations to get only those with 2 tags -> "isCriteriaOf" and "mark"
+        let groupFilteredAnnotations = _.filter(groupAnnotations, (annotation) => (Utils.filterTags(annotation.tags)))
+        // For each annotation the student's uri, the question and the mark are saved
+        let studentsQuestionsGroupRep = _.map(groupFilteredAnnotations, (annotation) => ({
+          'uri': annotation.uri,
+          'pregunta': annotation.tags[0].slice(18),
+          'nota': parseInt(annotation.tags[1].slice(10))
         }))
-        // Se eliminan los objetos repetidos
-        let preguntasAlumnosGrupo = _.uniqBy(preguntasAlumnosGrupoRep, (alumno) => (alumno.uri.concat(alumno.pregunta)))
-        // Se obtiene por cada pregunta la media
-        let mediaPreguntas = _(preguntasAlumnosGrupo).groupBy('pregunta')
-          .map((alumnos, pregunta) => ({
-            'axis': pregunta,
-            'value': _.sumBy(alumnos, 'nota') / alumnos.length
+        // Repeated objects are deleted
+        let studentsQuestionsGroup = _.uniqBy(studentsQuestionsGroupRep, (student) => (student.uri.concat(student.pregunta)))
+        // The average mark is obtained for each question
+        let averageGradeQuestions = _(studentsQuestionsGroup).groupBy('pregunta')
+          .map((students, question) => ({
+            'axis': question,
+            'value': _.sumBy(students, 'nota') / students.length
           })).value()
-        // Se obtiene la puntuacion maxima de cada pregunta
-        let puntuacionMaxima = this.puntuacionMaximaGrupo(groupAnnotations)
-        this.puntuacionMaximaGrupos = _.concat(this.puntuacionMaximaGrupos, puntuacionMaxima)
-
-        // Se asigna como atributo nuevo la puntuacion maxima a las medias de cada preguntas obtenidas previamente
-        _.map(mediaPreguntas, function (pregunta) {
-          return _.assign(pregunta, _.find(puntuacionMaxima, {
-            pregunta: pregunta.axis
+        // The maximum value of each question is obtained
+        let maximumValue = this.maximumValueGroup(groupAnnotations)
+        this.maximumValueGroups = _.concat(this.maximumValueGroups, maximumValue)
+        // The maximum value is assigned as a new attribute to each question of averageGradeQuestions
+        _.map(averageGradeQuestions, function (question) {
+          return _.assign(question, _.find(maximumValue, {
+            pregunta: question.axis
           }))
         })
-        let mediaPreguntasPorcentajes = _.map(mediaPreguntas, (pregunta) => ({
-          'axis': pregunta.axis,
-          'value': (pregunta.value / pregunta.puntuacionMayor),
-          'maximumValue': pregunta.puntuacionMayor,
-          'mark': pregunta.value,
-          'group': grupo
+        let averageGradesQuestionsWithPorcentages = _.map(averageGradeQuestions, (question) => ({
+          'axis': question.axis,
+          'value': (question.value / question.puntuacionMayor),
+          'maximumValue': question.puntuacionMayor,
+          'mark': question.value,
+          'group': group
         }))
-        // Estructura final: Eje (nombre de la pregunta), value (porcentaje sobre 100), maximumValue (valor maximo de la pregunta), mark (nota media de la clase) y group (grupo del examen al que pertenece la pregunta)
+        // Final structure: Axis (name of the question), value (percentage), maximumValue (maximum value of the question),
+        // mark (average grade of the class) and group (group of exam the question belongs)
         if (_.isFunction(callback)) {
-          callback(null, _.orderBy(mediaPreguntasPorcentajes, 'axis'))
+          callback(null, _.orderBy(averageGradesQuestionsWithPorcentages, 'axis'))
         }
       }
     })
   }
 
-  // Obtiene la puntuacion maxima de cada pergunta de un examen
-  puntuacionMaximaGrupo (anotacionesGrupo) {
-    // Se obtienen las primeras anotaciones del grupo que fueron generados automaticamente
-    let criteriosDeRubrica = _.filter(anotacionesGrupo, (value, key) => { return Utils.filtradoTags2(value.tags) })
+  // Get the maximum score of each question of an exam
+  maximumValueGroup (groupAnnotations) {
+    // The first annotations of the group that were generated automatically are obtained
+    let rubric = _.filter(groupAnnotations, (value, key) => { return Utils.filterTags2(value.tags) })
 
-    // Se agrupan por pregunta y se obtiene el valor maximo de cada una
-    let puntuacionMaximaEjercicios = _(criteriosDeRubrica).groupBy((d) => d.tags[1]).map((puntuaciones, pregunta) => ({
-      'pregunta': pregunta.slice(18),
-      'puntuacionMayor': parseInt(_.maxBy(puntuaciones, (o) => { return parseInt(o.tags[0].slice(10)) }).tags[0].slice(10))
+    // They are grouped by question and the maximum value of each one is obtained
+    let questionsMaximumValue = _(rubric).groupBy((d) => d.tags[1]).map((values, question) => ({
+      'pregunta': question.slice(18),
+      'puntuacionMayor': parseInt(_.maxBy(values, (o) => { return parseInt(o.tags[0].slice(10)) }).tags[0].slice(10))
     })).value()
 
-    return puntuacionMaximaEjercicios
+    return questionsMaximumValue
   }
 
+  // Function to retrieve user annotations
   retrieveUserAnnotations (callback) {
     this.hypothesisClientManager.hypothesisClient.searchAnnotations({
       user: 'https%3A%2F%2Fdrive.google.com%2Fdrive%2Ffolders%2F1HsWtAT6SnEUz3ILusI2I95Hkgx5mvolp', // this.loc
@@ -1021,6 +1035,7 @@ class SpiderChart {
     })
   }
 
+  // Function to retrieve user groups annotations
   retrieveGroupAnnotations (group, callback) {
     this.hypothesisClientManager.hypothesisClient.searchAnnotations({
       group: group,
@@ -1037,6 +1052,7 @@ class SpiderChart {
     })
   }
 
+  // Function to retrieve user groups
   retrieveGroups (callback) {
     this.hypothesisClientManager.hypothesisClient.getListOfGroups({}, (err, groups) => {
       if (err) {
@@ -1049,53 +1065,59 @@ class SpiderChart {
     })
   }
 
-  filtrarAnotaciones (anotaciones) {
-    return _.filter(anotaciones.rows, (anotacion) => (Utils.filtradoTags(anotacion.tags)))
+  // Function that filters annotations to get only those with 2 tags -> "isCriteriaOf" and "mark"
+  filterAnnotations (annotations) {
+    return _.filter(annotations.rows, (annotation) => (Utils.filterTags(annotation.tags)))
   }
 
-  obtenerPreguntasAlumno (anotFiltradas) {
-    return _.map(anotFiltradas, (anotacion) => ({
-      'axis': anotacion.tags[0].slice(18),
-      'value': parseInt(anotacion.tags[1].slice(10)),
-      'group': anotacion.group
+  // Funtion that creates a structure with the name of the axis that corresponds to the question, the value that corresponds the mark and the exam
+  obtainStudentQuestions (annotations) {
+    return _.map(annotations, (annotation) => ({
+      'axis': annotation.tags[0].slice(18),
+      'value': parseInt(annotation.tags[1].slice(10)),
+      'group': annotation.group
     }))
   }
 
-  eliminarPreguntasRepetidas (preguntasAlumnosRep) {
-    return _.uniqBy(preguntasAlumnosRep, 'axis')
+  // Function to delete the repeated objects of a list
+  deleteRepeatedQuestions (studentQuestionsRep) {
+    return _.uniqBy(studentQuestionsRep, 'axis')
   }
 
-  obtenerGrupos (anotFiltradas) {
-    return _(anotFiltradas).map('group').uniq().value()
+  // Function that obtains the groups to which the student belongs
+  obtainGroups (annotations) {
+    return _(annotations).map('group').uniq().value()
   }
 
-  obtenerPorcentajes () {
-    let puntuacionMaximaGruposCopia = _.clone(this.puntuacionMaximaGrupos)
-    let preguntasAlumnoMaximo = _.map(this.preguntasAlumno, function (pregunta) {
-      return _.assign(pregunta, _.find(puntuacionMaximaGruposCopia, {
+  // Tor each mark of the student, the maximum possible mark for that question is added to calculate the percentages
+  obtainPorcentages () {
+    let maximumValueGroupsCopy = _.clone(this.maximumValueGroups)
+    let studentQuestionsMaximum = _.map(this.studentQuestions, function (pregunta) {
+      return _.assign(pregunta, _.find(maximumValueGroupsCopy, {
         pregunta: pregunta.axis
       }))
     })
-    // Estructura final: Eje (nombre de la pregunta), value (porcentaje sobre 100), maximumValue (valor maximo de la pregunta), mark (nota del alumno) y group (grupo del examen al que pertenece la pregunta)
-    let preguntasAlumnoTotal = _.map(preguntasAlumnoMaximo, (pregunta) => ({
-      'axis': pregunta.axis,
-      'value': (pregunta.value / pregunta.puntuacionMayor),
-      'maximumValue': pregunta.puntuacionMayor,
-      'mark': pregunta.value,
-      'group': pregunta.group
+    // Final structure: Axis (name of the question), value (percentage), maximumValue (maximum value of the question),
+    // mark (average grade of the student) and group (group of exam the question belongs)
+    let studentQuestionsTotal = _.map(studentQuestionsMaximum, (question) => ({
+      'axis': question.axis,
+      'value': (question.value / question.puntuacionMayor),
+      'maximumValue': question.puntuacionMayor,
+      'mark': question.value,
+      'group': question.group
     }))
-    return preguntasAlumnoTotal
+    return studentQuestionsTotal
   }
 
-  // Funcion que dibuja el diagrama
-  dibujarSpiderChart (data) {
+  // Function to draw the spider chart
+  drawSpiderChart (data, leyenda) {
     let w = 350
 
     let h = 350
 
     let colorscale = d3.scale.category10()
 
-    // Titulos de las leyendas
+    // Legend titles
     let mycfg = {
       w: w,
       h: h,
@@ -1107,6 +1129,7 @@ class SpiderChart {
     d3.select('#chart').remove()
     d3.select('#body').remove()
     d3.select('#divSelect').remove()
+    d3.select('#divGraphic').remove()
     let divGraphic = d3.select('.a-s-Xc-ag-fa-Te').append('div')
       .attr('id', 'divGraphic')
       .style('width', '600px')
@@ -1122,76 +1145,73 @@ class SpiderChart {
     divGraphicBody.append('div').attr('id', 'chart')
     RadarChart.draw('#chart', data, mycfg)
 
-    this.gruposNombreID = _.filter(this.gruposNombreID, (grupo) => (this.grupos.includes(grupo.id)))
-    let gruposLista = _.concat(this.gruposNombreID, {'id': 'Total', 'nombre': 'Total'})
+    this.groupsNameID = _.filter(this.groupsNameID, (group) => (this.groups.includes(group.id)))
+    let listGroups = _.concat(this.groupsNameID, {'id': 'Total', 'nombre': 'Total'})
 
     d3.select('#divSelect')
       .append('select')
       .attr('class', 'desplegable')
       .attr('id', 'desplegable')
       .on('change', function (d, i) {
-        let grupoSeleccionado = d3.select('#desplegable').node().value // Examen seleccionado
-
-        if (grupoSeleccionado === 'Total') { // Vision general de los examenes
-          this.LegendOptions = ['Alumno', 'Media de la clase']
-          window.spiderChart.dibujarSpiderChart(window.spiderChart.data)
-        } else { // Vision de un examen en concreto
-          let notasAlumnoExamen = _.filter(window.spiderChart.data[0], {'group': grupoSeleccionado})
-          let notasMediasExamen = _.filter(window.spiderChart.data[1], {'group': grupoSeleccionado})
-          let dataGrupo = []
-          dataGrupo.push(notasAlumnoExamen)
-          dataGrupo.push(notasMediasExamen)
-          // Leyenda con las notas medias del alumno y la clase
-          let notaAlumno = _.sumBy(notasAlumnoExamen, 'mark')
-          let notaClase = _.sumBy(notasMediasExamen, 'mark').toFixed(2)
-          let valorExamen = _.sumBy(notasAlumnoExamen, 'maximumValue')
-          let porcentajeAlumno = ((notaAlumno / valorExamen) * 100).toFixed(2)
-          let porcentajeClase = ((notaClase / valorExamen) * 100).toFixed(2)
-          debugger
-          let leyendaAlumno = 'Alumno: ' + notaAlumno + '/' + valorExamen + ' (' + porcentajeAlumno + '%)'
-          let leyendaGrupo = 'Media de la clase: ' + notaClase + '/' + valorExamen + ' (' + porcentajeClase + '%)'
-          this.LegendOptions = [leyendaAlumno, leyendaGrupo]
-          window.spiderChart.dibujarSpiderChart(dataGrupo)
+        let selectedExam = d3.select('#desplegable').node().value // Selected exam
+        if (selectedExam === 'Total') { // Overview of exams
+          this.LegendOptions = ['Student', 'Class average']
+          window.spiderChart.drawSpiderChart(window.spiderChart.data, this.LegendOptions)
+        } else { // View of a concrete exam
+          let studentExamMarks = _.filter(window.spiderChart.data[0], {'group': selectedExam})
+          let averageExamMarks = _.filter(window.spiderChart.data[1], {'group': selectedExam})
+          let dataGroup = []
+          dataGroup.push(studentExamMarks)
+          dataGroup.push(averageExamMarks)
+          // Legend with the average grades of the student and the class
+          let studentMark = _.sumBy(studentExamMarks, 'mark')
+          let classMark = _.sumBy(averageExamMarks, 'mark').toFixed(2)
+          let examValue = _.sumBy(studentExamMarks, 'maximumValue')
+          let studentPorcentage = ((studentMark / examValue) * 100).toFixed(2)
+          let classPorcentage = ((classMark / examValue) * 100).toFixed(2)
+          let studentLegend = 'Student: ' + studentMark + '/' + examValue + ' (' + studentPorcentage + '%)'
+          let classLegend = 'Class average: ' + classMark + '/' + examValue + ' (' + classPorcentage + '%)'
+          this.LegendOptions = [studentLegend, classLegend]
+          window.spiderChart.drawSpiderChart(dataGroup, this.LegendOptions)
           d3.select('#desplegable')
-            .property('value', grupoSeleccionado)
+            .property('value', selectedExam)
         }
       })
       .selectAll('option')
-      .data(gruposLista)
+      .data(listGroups)
       .enter()
       .append('option')
       .attr('value', function (d) { return d.id })
       .text(function (d) { return d.nombre })
-    debugger
+
     d3.select('#desplegable')
       .property('value', 'Total')
 
-    // Crear leyenda
-
+    // Create legend
     let svg = d3.select('#body')
       .append('svg')
       .attr('id', 'svg')
       .attr('width', w + 300)
       .attr('height', h)
 
-    // Creael titulo de la leyenda
+    // Create the legend title
     svg.append('text')
       .attr('class', 'title')
-      .attr('transform', 'translate(90,0)')
+      .attr('transform', 'translate(70,0)')
       .attr('x', w - 70)
       .attr('y', 10)
       .attr('font-size', '12px')
       .attr('fill', '#404040')
-      .text('Resultado del alummo en comparacion con la media de clase')
+      .text('Student results compared to the class average')
 
     let legend = svg.append('g')
       .attr('class', 'legend')
       .attr('height', 100)
       .attr('width', 200)
-      .attr('transform', 'translate(150,20)')
-    debugger
+      .attr('transform', 'translate(120,20)')
+
     legend.selectAll('rect')
-      .data(this.LegendOptions)
+      .data(leyenda)
       .enter()
       .append('rect')
       .attr('x', w - 65)
@@ -1201,7 +1221,7 @@ class SpiderChart {
       .style('fill', function (d, i) { return colorscale(i) })
 
     legend.selectAll('text')
-      .data(this.LegendOptions)
+      .data(leyenda)
       .enter()
       .append('text')
       .attr('x', w - 52)

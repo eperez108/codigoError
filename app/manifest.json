@@ -23,18 +23,18 @@
   "content_scripts": [
     {
       "matches": ["https://hypothes.is/groups/*"],
-      "css": ["styles/estilo.css"],
-      "js": ["scripts/content.js","scripts/ScatterPlot.js","scripts/SankeyDiagram.js"]
+      "css": ["styles/style.css"],
+      "js": ["scripts/MarkAndGoVizForExamGroup.js","scripts/ScatterPlotExam.js","scripts/SankeyDiagram.js"]
     },
     {
       "matches": ["https://drive.google.com/drive/*"],
-      "css": ["styles/estiloSpiderChart.css"],
+      "css": ["styles/style.css"],
       "js": ["scripts/d3-radar.js","scripts/SpiderChart.js"]
     },
     {
       "matches": ["https://hypothes.is/users/*"],
-      "css": ["styles/estilo.css"],
-      "js": ["scripts/ScatterPlot2.js"]
+      "css": ["styles/style.css"],
+      "js": ["scripts/ScatterPlotContinuousAssessment.js"]
     }
   ],
   "permissions": [

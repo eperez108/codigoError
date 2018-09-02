@@ -210,3 +210,5 @@ var RadarChart = {
             .style('font-size', '13px');
     }
 };
+
+module.exports = RadarChart

@@ -59,7 +59,7 @@ class SankeyDiagram {
      * Creates the chart and inserts it in the hypothes.is website
      * @param annotations
      */
-  createChart (annotations) {
+  createSankeyDiagram (annotations) {
     this.annotations = annotations
     // Filter annotations to get only those with 2 tags -> "isCriteriaOf" and "mark"
     let filteredAnnotations = this.filterAnnotations(annotations)
@@ -305,7 +305,6 @@ class SankeyDiagram {
       }
     })
   }
-
 
   // Fuction that updates the exam links
   updateExamsLinks (exams) {

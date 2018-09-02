@@ -27,10 +27,10 @@ class MarkAndGoVizForExamGroup {
     // TODO Substitute this snippet with the following one which should be removed
     // Initialize hypothesis client manager
     /* const HypothesisClientManager = require('../hypothesis/HypothesisClientManager')
-        this.hypothesisClientManager = new HypothesisClientManager()
-        this.hypothesisClientManager.init((err) => {
+    this.hypothesisClientManager = new HypothesisClientManager()
+    this.hypothesisClientManager.init((err) => {
 
-        }) */
+    }) */
     // TODO Remove this
     this.hypothesisClientManager.hypothesisClient = new HypothesisClient('6879-Q--ve1yLCItODnHueg4py6UT-qqq93bk-xgvra0-BVA')
 

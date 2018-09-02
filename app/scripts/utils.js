@@ -1,34 +1,43 @@
+const _ = require('lodash')
+
 class Utils {
-  static filtradoTags (tags) {
+  // Function that returns TRUE if the tags of an annotation have 2 tags -> "isCriteriaOf" and "mark"
+  static filterTags (tags) {
     return (tags.length === 2) && tags[0].includes('isCriteriaOf') && tags[1].includes('mark')
   }
 
-  static normalizar (anotacionesGrupo, nota) {
-    // Se obtienen las primeras anotaciones del grupo que fueron generados automaticamente
-    let criteriosDeRubrica = _.filter(anotacionesGrupo, (value, key) => { return Utils.esNotaPreguntaTags(value.tags) })
+  // Returns TRUE if the tags array has 2 elements and the first one is the mark and the second one the question. These correspond to the rubric that is created at the beginning
+  static filterTags2 (tags) {
+    return (tags.length === 2) && tags[0].includes('mark') && tags[1].includes('isCriteriaOf')
+  }
 
-    // Se agrupan por pregunta y se obtiene el valor maximo de cada una
-    let puntuacionMaximaEjercicios = _(criteriosDeRubrica).groupBy((d) => d.tags[1]).map((puntuaciones, pregunta) => ({
-      'pregunta': pregunta,
-      'puntuacionMayor': parseInt(_.maxBy(puntuaciones, function (o) { return parseInt(o.tags[0].slice(10)) }).tags[0].slice(10))
+  static normalise (anotacionesGrupo, nota) {
+    // The first annotations of the group that were generated automatically are obtained
+    let criteriosDeRubrica = _.filter(anotacionesGrupo, (value, key) => { return Utils.isMarkQuestionTags(value.tags) })
+
+    // They are grouped by question and the maximum value of each one is obtained
+    let puntuacionMaximaEjercicios = _(criteriosDeRubrica).groupBy((d) => d.tags[1]).map((marks, question) => ({
+      'pregunta': question,
+      'puntuacionMayor': parseInt(_.maxBy(marks, function (o) { return parseInt(o.tags[0].slice(10)) }).tags[0].slice(10))
     })).value()
 
-    // Suma las puntuaciones maximas
+    // Add the highest scores
     let valorExamen = _.sumBy(puntuacionMaximaEjercicios, 'puntuacionMayor')
 
     return (nota * 10) / valorExamen
   }
 
-  static esPreguntaNotaTags (tags) {
+  static isQuestionMarkTags (tags) {
     return (tags.length === 2) && tags[0].includes(Utils.tags.isCriteriaOf) && tags[1].includes(Utils.tags.mark)
   }
 
   /**
-     * Devuelve TRUE si el array de tags tiene longitud 2 y la primera es la nota y la segunda la la pregunta. Estos corresponden a los criterios de rubrica que se crean al principio
+     * Returns TRUE if the tag array has 2 elements and the first one is the mark and the second the question.
+     * These correspond to the rubric that are created at the beginning
      * @param tags lista de tags
      * @returns {boolean|*}
      */
-  static esNotaPreguntaTags (tags) {
+  static isMarkQuestionTags (tags) {
     return (tags.length === 2) && tags[0].includes(Utils.tags.mark) && tags[1].includes(Utils.tags.isCriteriaOf)
   }
 }
