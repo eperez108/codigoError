@@ -4,44 +4,6 @@ const d3Tip = require('d3-tip')
 const _ = require('lodash')
 const HypothesisClient = require('hypothesis-api-client')
 
-this.hypothesisClientManager.hypothesisClient = new HypothesisClient('6879-Q--ve1yLCItODnHueg4py6UT-qqq93bk-xgvra0-BVA')
-let datos = []
-let promises = []
-let nombreGrupos = obtenerNombresGrupos()
-for (let i = 0; i < gruposId.length; i++) {
-  promises.push(new Promise((resolve, reject) => {
-    this.resultados(gruposId[i], (err, resultadosExamen) => {
-      if (err) {
-        reject(err)
-      } else {
-        resolve(resultadosExamen)
-      }
-    })
-  }))
-}
-// Ejecutamos los promises y refrescamos el gráfico
-Promise.all(promises).then((resolves) => {
-  // Filter all the group results which are not exams
-  let exams = _.filter(resolves, (resolve) => { return resolve.listaParAlumnoResultado.length > 0 })
-
-  for (let i = 0; i < exams.length; i++) {
-    let resultadosExamen = exams[i].listaParAlumnoResultado
-    let nombreGrupo = _.filter(nombreGrupos, { 'id': gruposId[i]})
-
-    // A grupamos a los alumnos por su nota media
-    let mediasExamen = _(resultadosExamen).countBy('resultado')
-      .map((count, nota) => ({
-        'examen': _.head(nombreGrupo).nombre,
-        'notaMedia': parseFloat(nota),
-        'numAlumnos': count
-      })).value()
-    datos = _.concat(datos, mediasExamen)
-  }
-}).catch((rejects) => {
-  // TODO Handle error
-
-})
-
 class ScatterPlotContinuousAssessment {
   constructor (group) {
     this.grupos = group
@@ -50,7 +12,42 @@ class ScatterPlotContinuousAssessment {
   }
 
   init () {
+    this.hypothesisClientManager.hypothesisClient = new HypothesisClient('6879-Q--ve1yLCItODnHueg4py6UT-qqq93bk-xgvra0-BVA')
+    this.obtenerNombresGrupos()
+    let promises = []
+    for (let i = 0; i < this.gruposNombreID.length; i++) {
+      promises.push(new Promise((resolve, reject) => {
+        this.resultados(this.gruposNombreID[i], (err, resultadosExamen) => {
+          if (err) {
+            reject(err)
+          } else {
+            resolve(resultadosExamen)
+          }
+        })
+      }))
+    }
+    // Ejecutamos los promises y refrescamos el gráfico
+    Promise.all(promises).then((resolves) => {
+      // Filter all the group results which are not exams
+      let exams = _.filter(resolves, (resolve) => { return resolve.listaParAlumnoResultado.length > 0 })
 
+      for (let i = 0; i < exams.length; i++) {
+        let resultadosExamen = exams[i].listaParAlumnoResultado
+        let nombreGrupo = _.filter(this.gruposNombreID, {'id': this.gruposNombreID[i].grupo})
+
+        // A grupamos a los alumnos por su nota media
+        let mediasExamen = _(resultadosExamen).countBy('resultado')
+          .map((count, nota) => ({
+            'examen': _.head(nombreGrupo).nombre,
+            'notaMedia': parseFloat(nota),
+            'numAlumnos': count
+          })).value()
+        this.datos = _.concat(this.datos, mediasExamen)
+      }
+    }).catch((rejects) => {
+      // TODO Handle error
+
+    })
   }
 
   // Funcion que obtiene la ID y los nombres de los grupos

@@ -163,7 +163,16 @@ circle {
 }
 
 #chart {
-    /*position: absolute;
-    top: 50px;
-    left: 100px;*/
+    position: absolute;
+    /* top: 50px;
+      left: 100px;*/
+}
+
+.desplegable{
+    background: grey;
+    color: #FFF;
+    border-radius: 2px;
+    padding: 5px;
+    border:0 !important;
+    margin:20px;
 }

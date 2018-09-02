@@ -32,6 +32,7 @@ class ScatterPlot {
   }
 
   dibujarScatterPlot (datos) {
+
     // Margenes
     let margins = {
       'left': 40,

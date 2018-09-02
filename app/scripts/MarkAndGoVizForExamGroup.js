@@ -1,7 +1,7 @@
 const _ = require('lodash')
 const HypothesisClient = require('hypothesis-api-client')
-const SankeyDiagram = require('./sankeyDiagramNew')
-const ScatterPlot = require('./ScatterPlotNew')
+const SankeyDiagram = require('./SankeyDiagram')
+const ScatterPlot = require('./ScatterPlotExam')
 
 /**
  * The manager for the visualization of MarkAndGo charts attached to the hypothes.is/groups/*groupid*
@@ -51,9 +51,8 @@ class MarkAndGoVizForExamGroup {
         this.sankeyDiagram = new SankeyDiagram(this.currentHypothesisGroupId)
         this.sankeyDiagram.init()
 
-        // TODO Initialize scatter chart
+        // Initialize scatter plot
         this.scatterDiagram = new ScatterPlot(this.currentHypothesisGroupId)
-        this.scatterDiagram.init()
 
         // Create interface buttons
         this.createInterfaceButtons()
@@ -75,8 +74,7 @@ class MarkAndGoVizForExamGroup {
     this.sankeyButton.value = chrome.i18n.getMessage('alluvialDiagramButton')
     this.sankeyButton.title = chrome.i18n.getMessage('alluvialDiagramButtonTitle')
     this.sankeyButton.addEventListener('click', () => {
-      // TODO Must be change the name of this function to createSankeyButton
-      this.sankeyDiagram.createChart(this.annotations)
+      this.sankeyDiagram.createSankeyDiagram(this.annotations)
     })
 
     // Create scatter button
@@ -86,8 +84,7 @@ class MarkAndGoVizForExamGroup {
     this.scatterButton.value = chrome.i18n.getMessage('scatterPlotButton')
     this.scatterButton.title = chrome.i18n.getMessage('scatterPlotButtonTitle')
     this.scatterButton.addEventListener('click', () => {
-      // TODO Uncomment this when scatter button is developed
-      this.scatterButton.createScatterPlot(this.annotations)
+      this.scatterDiagram.createScatterPlot(this.annotations)
     })
 
     document.getElementsByClassName('search-results')[0].insertBefore(this.chartContainer, document.getElementsByClassName('search-results__list')[0])
